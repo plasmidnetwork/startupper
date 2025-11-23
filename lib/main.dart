@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 // ============================================
 // MAIN ENTRY POINT
@@ -191,47 +193,83 @@ class _ReasonScreenState extends State<ReasonScreen> {
   Widget _buildRoleCard(String role, IconData icon, String description) {
     final isSelected = _selectedRole == role;
     
-    return Card(
-      elevation: isSelected ? 8 : 2,
-      color: isSelected ? Theme.of(context).colorScheme.primaryContainer : null,
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _selectedRole = role;
-          });
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                size: 48,
-                color: isSelected
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurface,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                role,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        // Subtle gradient for depth
+        gradient: isSelected
+            ? LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Theme.of(context).colorScheme.primaryContainer,
+                  Theme.of(context).colorScheme.primaryContainer.withOpacity(0.8),
+                ],
+              )
+            : null,
+        color: isSelected ? null : Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        // Polished border and glow effect
+        border: Border.all(
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.outline.withOpacity(0.2),
+          width: isSelected ? 2 : 1,
+        ),
+        // Soft shadow to lift the card
+        boxShadow: [
+          BoxShadow(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary.withOpacity(0.3)
+                : Colors.black.withOpacity(0.08),
+            blurRadius: isSelected ? 12 : 8,
+            offset: const Offset(0, 4),
+            spreadRadius: isSelected ? 2 : 0,
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            setState(() {
+              _selectedRole = role;
+            });
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              children: [
+                Icon(
+                  icon,
+                  size: 48,
                   color: isSelected
                       ? Theme.of(context).colorScheme.primary
-                      : null,
+                      : Theme.of(context).colorScheme.onSurface,
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                description,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                const SizedBox(height: 12),
+                Text(
+                  role,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                Text(
+                  description,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -320,6 +358,10 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
   
   // Track freelancing availability
   bool _availableForFreelancing = false;
+  
+  // Profile picture
+  File? _profileImage;
+  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void dispose() {
@@ -328,6 +370,60 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
     _locationController.dispose();
     _skillsController.dispose();
     super.dispose();
+  }
+  
+  // Pick profile picture from gallery or camera
+  Future<void> _pickProfileImage(ImageSource source) async {
+    try {
+      final XFile? pickedFile = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      
+      if (pickedFile != null) {
+        setState(() {
+          _profileImage = File(pickedFile.path);
+        });
+      }
+    } catch (e) {
+      // Handle error - show snackbar
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking image: $e')),
+        );
+      }
+    }
+  }
+  
+  // Show options to pick from camera or gallery
+  void _showImageSourceOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera),
+              title: const Text('Take Photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickProfileImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickProfileImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // Handle back button
@@ -341,6 +437,7 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
     final role = ModalRoute.of(context)!.settings.arguments as String;
     
     // TODO: Save common onboarding data to Supabase here
+    // TODO: Upload profile picture to Supabase Storage and save URL to profile
     
     // Navigate to role-specific onboarding
     String nextRoute;
@@ -383,7 +480,54 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
+            
+            // Profile picture section
+            Center(
+              child: Column(
+                children: [
+                  // Profile picture circle
+                  GestureDetector(
+                    onTap: _showImageSourceOptions,
+                    child: Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 3,
+                        ),
+                        image: _profileImage != null
+                            ? DecorationImage(
+                                image: FileImage(_profileImage!),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                      ),
+                      child: _profileImage == null
+                          ? Icon(
+                              Icons.add_a_photo,
+                              size: 40,
+                              color: Theme.of(context).colorScheme.primary,
+                            )
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // "Add photo" text
+                  TextButton.icon(
+                    onPressed: _showImageSourceOptions,
+                    icon: const Icon(Icons.camera_alt, size: 18),
+                    label: Text(
+                      _profileImage == null ? 'Add profile picture' : 'Change picture',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
             
             // Full name field
             TextField(
@@ -496,6 +640,12 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
   final _startupNameController = TextEditingController();
   final _pitchController = TextEditingController();
   
+  // Product details controllers (optional section)
+  final _websiteController = TextEditingController();
+  final _videoController = TextEditingController();
+  final _appStoreIdController = TextEditingController();
+  final _playStoreIdController = TextEditingController();
+  
   // Stage dropdown
   String _selectedStage = 'Idea';
   final List<String> _stages = ['Idea', 'Pre-seed', 'Seed', 'Series A+'];
@@ -509,11 +659,18 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
     'Beta users': false,
     'Advisors': false,
   };
+  
+  // Track if product details section is expanded
+  bool _isProductDetailsExpanded = false;
 
   @override
   void dispose() {
     _startupNameController.dispose();
     _pitchController.dispose();
+    _websiteController.dispose();
+    _videoController.dispose();
+    _appStoreIdController.dispose();
+    _playStoreIdController.dispose();
     super.dispose();
   }
 
@@ -572,6 +729,7 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
                 prefixIcon: Icon(Icons.lightbulb),
               ),
               maxLines: 2,
+              maxLength: 300, // Character limit with counter
             ),
             const SizedBox(height: 16),
             
@@ -622,8 +780,24 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
                       _lookingFor[item] = selected;
                     });
                   },
+                  showCheckmark: false, // Remove checkmark
                 );
               }).toList(),
+            ),
+            const SizedBox(height: 32),
+            
+            // Product details section (optional, expandable)
+            ProductDetailsSection(
+              isExpanded: _isProductDetailsExpanded,
+              onToggle: () {
+                setState(() {
+                  _isProductDetailsExpanded = !_isProductDetailsExpanded;
+                });
+              },
+              websiteController: _websiteController,
+              videoController: _videoController,
+              appStoreIdController: _appStoreIdController,
+              playStoreIdController: _playStoreIdController,
             ),
             const SizedBox(height: 32),
             
@@ -654,6 +828,145 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ============================================
+// PRODUCT DETAILS SECTION (Question-based)
+// ============================================
+// Optional section for founders to add product links
+// Uses a Yes/No question instead of dropdown
+class ProductDetailsSection extends StatelessWidget {
+  final bool isExpanded;
+  final VoidCallback onToggle;
+  final TextEditingController websiteController;
+  final TextEditingController videoController;
+  final TextEditingController appStoreIdController;
+  final TextEditingController playStoreIdController;
+
+  const ProductDetailsSection({
+    Key? key,
+    required this.isExpanded,
+    required this.onToggle,
+    required this.websiteController,
+    required this.videoController,
+    required this.appStoreIdController,
+    required this.playStoreIdController,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Question text
+        const Text(
+          'Do you have a product ready?',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        
+        // Yes/No selection chips (matching "what are you looking for?" style)
+        Wrap(
+          spacing: 8,
+          children: [
+            // No option (on the left)
+            FilterChip(
+              label: const Text('No'),
+              selected: !isExpanded,
+              onSelected: (selected) {
+                if (selected && isExpanded) {
+                  onToggle();
+                }
+              },
+              showCheckmark: false, // No checkmark
+            ),
+            // Yes option (on the right)
+            FilterChip(
+              label: const Text('Yes'),
+              selected: isExpanded,
+              onSelected: (selected) {
+                if (selected && !isExpanded) {
+                  onToggle();
+                }
+              },
+              showCheckmark: false, // No checkmark
+            ),
+          ],
+        ),
+        
+        // Animated expandable product fields
+        AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          child: isExpanded
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Website field
+                      TextField(
+                        controller: websiteController,
+                        decoration: const InputDecoration(
+                          labelText: 'Website',
+                          hintText: 'https://yourstartup.com',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.language),
+                        ),
+                        keyboardType: TextInputType.url,
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Demo video field
+                      TextField(
+                        controller: videoController,
+                        decoration: const InputDecoration(
+                          labelText: 'Demo video',
+                          hintText: 'https://youtu.be/...',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.play_circle_outline),
+                        ),
+                        keyboardType: TextInputType.url,
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // iOS App Store ID field
+                      TextField(
+                        controller: appStoreIdController,
+                        decoration: const InputDecoration(
+                          labelText: 'iOS App Store ID',
+                          hintText: 'e.g., 1234567890',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.apple),
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Google Play Store package name field
+                      TextField(
+                        controller: playStoreIdController,
+                        decoration: const InputDecoration(
+                          labelText: 'Google Play package name',
+                          hintText: 'e.g., com.myapp.mobile',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.android),
+                        ),
+                        keyboardType: TextInputType.text,
+                      ),
+                      
+                      // TODO: Save product details to Supabase when founder finishes
+                    ],
+                  ),
+                )
+              : const SizedBox.shrink(), // Hidden when "No" is selected
+        ),
+      ],
     );
   }
 }
