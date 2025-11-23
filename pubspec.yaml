@@ -1,0 +1,41 @@
+name: startupper
+description: A platform where founders, investors, and early users build together.
+publish_to: 'none'
+
+# The version of your app
+version: 1.0.0+1
+
+# Minimum Flutter SDK version required
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+# Dependencies are packages your app needs to run
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Material Design icons
+  cupertino_icons: ^1.0.2
+
+# Development dependencies are only used during development
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  
+  # Helps enforce good coding practices
+  flutter_lints: ^2.0.0
+
+# Flutter-specific configuration
+flutter:
+  uses-material-design: true
+  
+  # Add custom fonts here if needed
+  # fonts:
+  #   - family: CustomFont
+  #     fonts:
+  #       - asset: fonts/CustomFont-Regular.ttf
+  
+  # Add images/assets here if needed
+  # assets:
+  #   - images/logo.png
+
