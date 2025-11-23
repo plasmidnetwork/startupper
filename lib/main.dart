@@ -354,7 +354,6 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
   final _nameController = TextEditingController();
   final _headlineController = TextEditingController();
   final _locationController = TextEditingController();
-  final _skillsController = TextEditingController();
   
   // Track freelancing availability
   bool _availableForFreelancing = false;
@@ -368,7 +367,6 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
     _nameController.dispose();
     _headlineController.dispose();
     _locationController.dispose();
-    _skillsController.dispose();
     super.dispose();
   }
   
@@ -561,19 +559,6 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.location_on),
               ),
-            ),
-            const SizedBox(height: 16),
-            
-            // Skills field
-            TextField(
-              controller: _skillsController,
-              decoration: const InputDecoration(
-                labelText: 'Skills *',
-                hintText: 'Enter comma-separated skills',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.stars),
-              ),
-              maxLines: 2,
             ),
             const SizedBox(height: 24),
             
