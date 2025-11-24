@@ -1,56 +1,6 @@
 import 'package:flutter/material.dart';
-
-enum FeedCardType { update, highlight, mission, investor }
-
-class FeedAuthor {
-  const FeedAuthor({
-    required this.name,
-    required this.role,
-    required this.affiliation,
-    required this.timeAgo,
-  });
-
-  final String name;
-  final String role;
-  final String affiliation;
-  final String timeAgo;
-}
-
-class MetricHighlight {
-  const MetricHighlight({
-    required this.label,
-    required this.value,
-    this.color,
-  });
-
-  final String label;
-  final String value;
-  final Color? color;
-}
-
-class FeedCardData {
-  const FeedCardData({
-    required this.type,
-    required this.author,
-    required this.title,
-    required this.subtitle,
-    this.ask,
-    this.metrics = const [],
-    this.tags = const [],
-    this.reward,
-    this.featured = false,
-  });
-
-  final FeedCardType type;
-  final FeedAuthor author;
-  final String title;
-  final String subtitle;
-  final String? ask;
-  final List<MetricHighlight> metrics;
-  final List<String> tags;
-  final String? reward;
-  final bool featured;
-}
+import 'feed_models.dart';
+import 'feed_repository.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({Key? key}) : super(key: key);
@@ -61,11 +11,72 @@ class FeedScreen extends StatefulWidget {
 
 class _FeedScreenState extends State<FeedScreen> {
   final Set<String> _activeFilters = {'Personalized'};
+  final _repo = FeedRepository();
+  final ScrollController _scrollController = ScrollController();
+  List<FeedCardData> _items = [];
+  bool _loading = true;
+  bool _refreshing = false;
+  bool _loadingMore = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitial();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadInitial() async {
+    final data = await _repo.fetchFeed();
+    if (!mounted) return;
+    setState(() {
+      _items = data;
+      _loading = false;
+    });
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _refreshing = true;
+    });
+    final data = await _repo.fetchFeed();
+    if (!mounted) return;
+    setState(() {
+      _items = data;
+      _refreshing = false;
+    });
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore) return;
+    setState(() {
+      _loadingMore = true;
+    });
+    final more = await _repo.loadMore(_items.length);
+    if (!mounted) return;
+    setState(() {
+      _items = [..._items, ...more];
+      _loadingMore = false;
+    });
+  }
+
+  void _onScroll() {
+    if (_loadingMore) return;
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final featured = _feedItems.where((item) => item.featured).toList();
+    final featured = _items.where((item) => item.featured).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -73,71 +84,94 @@ class _FeedScreenState extends State<FeedScreen> {
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'What’s happening',
-                      style: theme.textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 12),
-                    _FiltersRow(
-                      activeFilters: _activeFilters,
-                      onToggle: (filter) {
-                        setState(() {
-                          if (_activeFilters.contains(filter)) {
-                            _activeFilters.remove(filter);
-                          } else {
-                            _activeFilters.add(filter);
-                          }
-                        });
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (featured.isNotEmpty)
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          displacement: 80,
+          child: CustomScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: SizedBox(
-                    height: 250,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      scrollDirection: Axis.horizontal,
-                      itemBuilder: (context, index) => _FeaturedCard(
-                        data: featured[index],
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'What’s happening',
+                        style: theme.textTheme.titleLarge,
                       ),
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(width: 12),
-                      itemCount: featured.length,
-                    ),
+                      const SizedBox(height: 12),
+                      _FiltersRow(
+                        activeFilters: _activeFilters,
+                        onToggle: (filter) {
+                          setState(() {
+                            if (_activeFilters.contains(filter)) {
+                              _activeFilters.remove(filter);
+                            } else {
+                              _activeFilters.add(filter);
+                            }
+                          });
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ),
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final item = _feedItems[index];
-                  return Padding(
-                    padding:
-                        EdgeInsets.fromLTRB(16, index == 0 ? 16 : 12, 16, 4),
-                    child: FeedCard(data: item),
-                  );
-                },
-                childCount: _feedItems.length,
-              ),
-            ),
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 24),
-            ),
-          ],
+              if (_loading)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else ...[
+                if (featured.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: SizedBox(
+                        height: 250,
+                        child: ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          scrollDirection: Axis.horizontal,
+                          itemBuilder: (context, index) => _FeaturedCard(
+                            data: featured[index],
+                          ),
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(width: 12),
+                          itemCount: featured.length,
+                        ),
+                      ),
+                    ),
+                  ),
+                SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final item = _items[index];
+                      return Padding(
+                        padding:
+                            EdgeInsets.fromLTRB(16, index == 0 ? 16 : 12, 16, 4),
+                        child: FeedCard(data: item),
+                      );
+                    },
+                    childCount: _items.length,
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: _loadingMore
+                          ? const CircularProgressIndicator()
+                          : Text(
+                              _refreshing ? 'Refreshing...' : ' ',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -735,103 +769,3 @@ Color _roleAccent(String role, ThemeData theme) {
       return theme.colorScheme.primary;
   }
 }
-
-const _feedItems = <FeedCardData>[
-  FeedCardData(
-    type: FeedCardType.highlight,
-    author: FeedAuthor(
-      name: 'Lina Park',
-      role: 'Founder',
-      affiliation: 'Northwind AI',
-      timeAgo: '2h',
-    ),
-    title: 'Northwind AI',
-    subtitle: 'Compliance co-pilot for seed-stage fintech teams.',
-    tags: ['Seed', 'Fintech', 'B2B SaaS'],
-    ask: 'Raising \$1.2M seed',
-    metrics: [
-      MetricHighlight(label: 'MRR', value: '+12%', color: Colors.blueAccent),
-      MetricHighlight(label: 'Waitlist', value: '1.2k'),
-    ],
-    featured: true,
-  ),
-  FeedCardData(
-    type: FeedCardType.update,
-    author: FeedAuthor(
-      name: 'Amir Khan',
-      role: 'Founder',
-      affiliation: 'Driftspace',
-      timeAgo: '6h',
-    ),
-    title: 'Weekly update',
-    subtitle:
-        'Shipped AI onboarding and cut churn by 9%. Piloting with 3 design partners this week.',
-    ask: 'Looking for intros to PLG advisors',
-    metrics: [
-      MetricHighlight(label: 'Activation', value: '+7%'),
-      MetricHighlight(label: 'Engagement', value: '5.2 min', color: Colors.redAccent),
-    ],
-  ),
-  FeedCardData(
-    type: FeedCardType.mission,
-    author: FeedAuthor(
-      name: 'Sofia Duarte',
-      role: 'Founder',
-      affiliation: 'Velvet Labs',
-      timeAgo: '8h',
-    ),
-    title: 'Landing page UX teardown',
-    subtitle: 'Need a sharp UX eye to tighten fold messaging and CTA flow.',
-    tags: ['Design', '1-2 hrs', 'Remote'],
-    reward: '\$300',
-    ask: 'Prefer B2B SaaS experience',
-  ),
-  FeedCardData(
-    type: FeedCardType.highlight,
-    author: FeedAuthor(
-      name: 'Kai Müller',
-      role: 'Founder',
-      affiliation: 'Sunset Bio',
-      timeAgo: '1d',
-    ),
-    title: 'Sunset Bio',
-    subtitle: 'Home-to-clinic lab kit routing with insurer integrations.',
-    tags: ['Health', 'Series A', 'APIs'],
-    ask: 'Adding design partners',
-    metrics: [
-      MetricHighlight(label: 'Clinics', value: '42'),
-      MetricHighlight(label: 'Turnaround', value: '-18%', color: Colors.green),
-    ],
-    featured: true,
-  ),
-  FeedCardData(
-    type: FeedCardType.investor,
-    author: FeedAuthor(
-      name: 'Amelia Cho',
-      role: 'Investor',
-      affiliation: 'Peak Signal',
-      timeAgo: '1d',
-    ),
-    title: 'Peak Signal — B2B infra & applied AI',
-    subtitle:
-        'Leading \$150k–\$500k checks, post-revenue. Looking for workflow AI with strong gross margin.',
-    tags: ['Seed', 'AI infra', 'Vertical SaaS'],
-    ask: 'Office hours this week',
-  ),
-  FeedCardData(
-    type: FeedCardType.update,
-    author: FeedAuthor(
-      name: 'Diego Rojas',
-      role: 'Builder',
-      affiliation: 'UX engineer',
-      timeAgo: '2d',
-    ),
-    title: 'Shipped design sprint',
-    subtitle:
-        'Wrapped a 4-day sprint for a fintech dashboard. Happy to help founders with quick front-end lifts.',
-    ask: 'Open for weekend missions',
-    metrics: [
-      MetricHighlight(label: 'CSAT', value: '9.4/10', color: Colors.orange),
-    ],
-  ),
-];
