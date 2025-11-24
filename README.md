@@ -14,7 +14,9 @@ Startupper is a Flutter app that connects three types of users in the startup ec
 ```
 startupper/
 ├── lib/
-│   └── main.dart          # Main app with all screens and navigation
+│   ├── main.dart          # App shell, auth, onboarding, routing
+│   └── feed/
+│       └── feed_screen.dart  # Feed UI, cards, mocked data
 ├── ios/                   # iOS platform files
 ├── macos/                 # macOS platform files
 ├── pubspec.yaml           # Project dependencies and configuration
@@ -94,9 +96,15 @@ startupper/
    - Multi-select interest checkboxes
    - Back and Finish navigation
 
-7. **Feed Screen** (`/feed`)
-   - Welcome placeholder
-   - No back button (onboarding complete)
+7. **Feed Screen** (`/feed`, `lib/feed/feed_screen.dart`)
+   - Hero featured strip with horizontal cards
+   - Main feed list with card variants:
+     - Update cards (metrics, ask chips, applause/comment/interest actions)
+     - Startup highlights (tags, metrics, asks, CTA)
+     - Missions/tasks (reward badge, tags, claim/save CTAs)
+     - Investor spotlights (thesis, tags, intro/share CTAs)
+   - Filter chips row and role-accented styling
+   - Mocked data powering the feed (no backend yet)
 
 ### ✨ Key Features
 
@@ -116,6 +124,7 @@ startupper/
 - ✅ Consistent FilterChip styling (no checkmarks)
 - ✅ Color-based selection indicators
 - ✅ Smooth expand/collapse animations
+- ✅ Feed layouts with featured horizontal strip and responsive card actions
 
 **Form Features:**
 - ✅ Profile picture upload with image picker
@@ -126,6 +135,7 @@ startupper/
 - ✅ Multi-line text inputs where appropriate
 - ✅ Proper keyboard types (URL, email, number)
 - ✅ Required field indicators (*)
+- ✅ Inline validation on auth/onboarding forms; navigation gated on validity
 
 **Code Quality:**
 - ✅ Null-safe Dart
@@ -134,6 +144,7 @@ startupper/
 - ✅ Proper controller disposal
 - ✅ TODO comments for Supabase integration
 - ✅ No linting errors
+- ✅ Testing bypass flag for validation: `--dart-define=BYPASS_VALIDATION=true`
 
 ### 📦 Dependencies
 
@@ -164,18 +175,20 @@ FeedScreen
 - TextEditingController for form inputs
 - Route arguments for passing selected role
 - File storage for profile images
+- Mocked feed data defined in `lib/feed/feed_screen.dart`
 
 ## Next Steps
 
 ### Immediate Priorities
-- [ ] Add form validation (required fields, email format)
+- [x] Add form validation (required fields, email format)
+- [ ] Add loading states and error handling
 - [ ] Integrate Supabase authentication (sign up, login, sessions)
 - [ ] Set up Supabase Storage for profile pictures
 - [ ] Save user profiles to Supabase database
-- [ ] Add loading states and error handling
+- [ ] Move feed data to a service layer and wire to backend when ready
 
 ### Feature Development
-- [ ] Build out the feed screen with real content
+- [ ] Build out the feed screen with real content (Supabase or API)
 - [ ] Implement startup discovery and browsing
 - [ ] Add user profile viewing and editing
 - [ ] Create founder-investor matching
@@ -198,9 +211,9 @@ FeedScreen
 
 ## Development Notes
 
-- All code currently in single `main.dart` file (1300+ lines)
+- Most auth/onboarding code still resides in `main.dart`; feed UI lives in `lib/feed/feed_screen.dart`
 - No external state management (Provider, Riverpod, etc.) yet
-- No form validation implemented yet
+- Inline form validation implemented; can be bypassed for testing with `--dart-define=BYPASS_VALIDATION=true`
 - No backend integration yet (Supabase ready)
 - Profile images stored locally only
 
@@ -218,4 +231,3 @@ TBD
 ---
 
 **Built with Flutter 🚀**
-

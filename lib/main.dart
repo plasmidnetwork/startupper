@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'feed/feed_screen.dart';
 
+// Allow test runs to bypass form validation when launched with:
+// flutter run --dart-define=BYPASS_VALIDATION=true
+const bool kBypassValidation =
+    bool.fromEnvironment('BYPASS_VALIDATION', defaultValue: false);
+
 // ============================================
 // MAIN ENTRY POINT
 // ============================================
@@ -56,6 +61,7 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
+  final _formKey = GlobalKey<FormState>();
   // Controllers manage the text in our TextFields
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -70,16 +76,20 @@ class _AuthScreenState extends State<AuthScreen> {
 
   // Handle login button press
   void _handleLogin() {
-    // TODO: Add Supabase authentication logic here
-    // For now, just navigate to role selection
-    Navigator.pushReplacementNamed(context, '/onboarding/reason');
+    if (kBypassValidation || (_formKey.currentState?.validate() ?? false)) {
+      // TODO: Add Supabase authentication logic here
+      // For now, just navigate to role selection
+      Navigator.pushReplacementNamed(context, '/onboarding/reason');
+    }
   }
 
   // Handle signup button press
   void _handleSignup() {
-    // TODO: Add Supabase signup logic here
-    // For now, just navigate to role selection
-    Navigator.pushReplacementNamed(context, '/onboarding/reason');
+    if (kBypassValidation || (_formKey.currentState?.validate() ?? false)) {
+      // TODO: Add Supabase signup logic here
+      // For now, just navigate to role selection
+      Navigator.pushReplacementNamed(context, '/onboarding/reason');
+    }
   }
 
   @override
@@ -92,68 +102,92 @@ class _AuthScreenState extends State<AuthScreen> {
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
-          child: Card(
-            elevation: 4,
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Welcome text
-                  const Text(
-                    'Welcome to Startupper',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
+          child: Form(
+            key: _formKey,
+            child: Card(
+              elevation: 4,
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Welcome text
+                    const Text(
+                      'Welcome to Startupper',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 32),
-                  
-                  // Email input field
-                  TextField(
-                    controller: _emailController,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.email),
+                    const SizedBox(height: 32),
+                    
+                    // Email input field
+                    TextFormField(
+                      controller: _emailController,
+                      decoration: const InputDecoration(
+                        labelText: 'Email',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.email),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (value) {
+                        final trimmed = value?.trim() ?? '';
+                        if (trimmed.isEmpty) {
+                          return 'Email is required';
+                        }
+                        final emailRegex =
+                            RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+                        if (!emailRegex.hasMatch(trimmed)) {
+                          return 'Enter a valid email';
+                        }
+                        return null;
+                      },
                     ),
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Password input field
-                  TextField(
-                    controller: _passwordController,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.lock),
+                    const SizedBox(height: 16),
+                    
+                    // Password input field
+                    TextFormField(
+                      controller: _passwordController,
+                      decoration: const InputDecoration(
+                        labelText: 'Password',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.lock),
+                      ),
+                      obscureText: true, // Hides password characters
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Password is required';
+                        }
+                        if (value.length < 6) {
+                          return 'Use at least 6 characters';
+                        }
+                        return null;
+                      },
                     ),
-                    obscureText: true, // Hides password characters
-                  ),
-                  const SizedBox(height: 24),
-                  
-                  // Login button
-                  ElevatedButton(
-                    onPressed: _handleLogin,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    const SizedBox(height: 24),
+                    
+                    // Login button
+                    ElevatedButton(
+                      onPressed: _handleLogin,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text(
+                        'Login',
+                        style: TextStyle(fontSize: 16),
+                      ),
                     ),
-                    child: const Text(
-                      'Login',
-                      style: TextStyle(fontSize: 16),
+                    const SizedBox(height: 12),
+                    
+                    // Switch to signup button
+                    TextButton(
+                      onPressed: _handleSignup,
+                      child: const Text('Don\'t have an account? Sign up'),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Switch to signup button
-                  TextButton(
-                    onPressed: _handleSignup,
-                    child: const Text('Don\'t have an account? Sign up'),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -351,6 +385,7 @@ class CommonOnboardingScreen extends StatefulWidget {
 }
 
 class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
+  final _formKey = GlobalKey<FormState>();
   // Controllers for text fields
   final _nameController = TextEditingController();
   final _headlineController = TextEditingController();
@@ -432,6 +467,9 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
 
   // Handle next button
   void _handleNext() {
+    if (!(kBypassValidation || (_formKey.currentState?.validate() ?? false))) {
+      return;
+    }
     // Get the selected role from the route arguments
     final role = ModalRoute.of(context)!.settings.arguments as String;
     
@@ -469,141 +507,162 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Tell us about yourself',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Tell us about yourself',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 32),
-            
-            // Profile picture section
-            Center(
-              child: Column(
-                children: [
-                  // Profile picture circle
-                  GestureDetector(
-                    onTap: _showImageSourceOptions,
-                    child: Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Theme.of(context).colorScheme.primaryContainer,
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.primary,
-                          width: 3,
+              const SizedBox(height: 32),
+              
+              // Profile picture section
+              Center(
+                child: Column(
+                  children: [
+                    // Profile picture circle
+                    GestureDetector(
+                      onTap: _showImageSourceOptions,
+                      child: Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Theme.of(context).colorScheme.primaryContainer,
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 3,
+                          ),
+                          image: _profileImage != null
+                              ? DecorationImage(
+                                  image: FileImage(_profileImage!),
+                                  fit: BoxFit.cover,
+                                )
+                              : null,
                         ),
-                        image: _profileImage != null
-                            ? DecorationImage(
-                                image: FileImage(_profileImage!),
-                                fit: BoxFit.cover,
+                        child: _profileImage == null
+                            ? Icon(
+                                Icons.add_a_photo,
+                                size: 40,
+                                color: Theme.of(context).colorScheme.primary,
                               )
                             : null,
                       ),
-                      child: _profileImage == null
-                          ? Icon(
-                              Icons.add_a_photo,
-                              size: 40,
-                              color: Theme.of(context).colorScheme.primary,
-                            )
-                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                    // "Add photo" text
+                    TextButton.icon(
+                      onPressed: _showImageSourceOptions,
+                      icon: const Icon(Icons.camera_alt, size: 18),
+                      label: Text(
+                        _profileImage == null ? 'Add profile picture' : 'Change picture',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+              
+              // Full name field
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Full Name *',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.person),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Full name is required';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              
+              // Headline field
+              TextFormField(
+                controller: _headlineController,
+                decoration: const InputDecoration(
+                  labelText: 'Headline *',
+                  hintText: 'e.g., Product Designer • Ex-Google',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.text_fields),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Headline is required';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              
+              // Location field
+              TextFormField(
+                controller: _locationController,
+                decoration: const InputDecoration(
+                  labelText: 'Location *',
+                  hintText: 'e.g., San Francisco, CA',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.location_on),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Location is required';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 24),
+              
+              // Freelancing availability switch
+              SwitchListTile(
+                title: const Text('Available for freelancing?'),
+                subtitle: const Text('Let startups know you\'re open to projects'),
+                value: _availableForFreelancing,
+                onChanged: (value) {
+                  setState(() {
+                    _availableForFreelancing = value;
+                  });
+                },
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              const SizedBox(height: 32),
+              
+              // Navigation buttons
+              Row(
+                children: [
+                  // Back button
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _handleBack,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text('Back'),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  // "Add photo" text
-                  TextButton.icon(
-                    onPressed: _showImageSourceOptions,
-                    icon: const Icon(Icons.camera_alt, size: 18),
-                    label: Text(
-                      _profileImage == null ? 'Add profile picture' : 'Change picture',
+                  const SizedBox(width: 16),
+                  // Next button
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _handleNext,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text('Next'),
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 32),
-            
-            // Full name field
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Full Name *',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person),
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            // Headline field
-            TextField(
-              controller: _headlineController,
-              decoration: const InputDecoration(
-                labelText: 'Headline *',
-                hintText: 'e.g., Product Designer • Ex-Google',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.text_fields),
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            // Location field
-            TextField(
-              controller: _locationController,
-              decoration: const InputDecoration(
-                labelText: 'Location *',
-                hintText: 'e.g., San Francisco, CA',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.location_on),
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Freelancing availability switch
-            SwitchListTile(
-              title: const Text('Available for freelancing?'),
-              subtitle: const Text('Let startups know you\'re open to projects'),
-              value: _availableForFreelancing,
-              onChanged: (value) {
-                setState(() {
-                  _availableForFreelancing = value;
-                });
-              },
-              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-            ),
-            const SizedBox(height: 32),
-            
-            // Navigation buttons
-            Row(
-              children: [
-                // Back button
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _handleBack,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: const Text('Back'),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                // Next button
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _handleNext,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: const Text('Next'),
-                  ),
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -623,6 +682,7 @@ class FounderOnboardingScreen extends StatefulWidget {
 }
 
 class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _startupNameController = TextEditingController();
   final _pitchController = TextEditingController();
   
@@ -665,6 +725,9 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
   }
 
   void _handleFinish() {
+    if (!(kBypassValidation || (_formKey.currentState?.validate() ?? false))) {
+      return;
+    }
     // TODO: Save founder-specific data to Supabase here
     // Navigate to feed screen (replace so user can't go back)
     Navigator.pushReplacementNamed(context, '/feed');
@@ -682,136 +745,157 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Tell us about your startup',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Tell us about your startup',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Startup name
-            TextField(
-              controller: _startupNameController,
-              decoration: const InputDecoration(
-                labelText: 'Startup Name *',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.business),
+              const SizedBox(height: 24),
+              
+              // Startup name
+              TextFormField(
+                controller: _startupNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Startup Name *',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.business),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Startup name is required';
+                  }
+                  return null;
+                },
               ),
-            ),
-            const SizedBox(height: 16),
-            
-            // One-liner pitch
-            TextField(
-              controller: _pitchController,
-              decoration: const InputDecoration(
-                labelText: 'One-liner Pitch *',
-                hintText: 'Describe your startup in one sentence',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.lightbulb),
+              const SizedBox(height: 16),
+              
+              // One-liner pitch
+              TextFormField(
+                controller: _pitchController,
+                decoration: const InputDecoration(
+                  labelText: 'One-liner Pitch *',
+                  hintText: 'Describe your startup in one sentence',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lightbulb),
+                ),
+                maxLines: 2,
+                maxLength: 300, // Character limit with counter
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Pitch is required';
+                  }
+                  return null;
+                },
               ),
-              maxLines: 2,
-              maxLength: 300, // Character limit with counter
-            ),
-            const SizedBox(height: 16),
-            
-            // Stage dropdown
-            DropdownButtonFormField<String>(
-              initialValue: _selectedStage,
-              decoration: const InputDecoration(
-                labelText: 'Stage *',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.trending_up),
-              ),
-              items: _stages.map((stage) {
-                return DropdownMenuItem(
-                  value: stage,
-                  child: Text(stage),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    _selectedStage = value;
-                  });
-                }
-              },
-            ),
-            const SizedBox(height: 24),
-            
-            // What are you looking for section
-            const Text(
-              'What are you looking for?',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            
-            // Multi-select chips
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _lookingFor.keys.map((item) {
-                return FilterChip(
-                  label: Text(item),
-                  selected: _lookingFor[item]!,
-                  onSelected: (selected) {
+              const SizedBox(height: 16),
+              
+              // Stage dropdown
+              DropdownButtonFormField<String>(
+                value: _selectedStage,
+                decoration: const InputDecoration(
+                  labelText: 'Stage *',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.trending_up),
+                ),
+                items: _stages.map((stage) {
+                  return DropdownMenuItem(
+                    value: stage,
+                    child: Text(stage),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
                     setState(() {
-                      _lookingFor[item] = selected;
+                      _selectedStage = value;
                     });
-                  },
-                  showCheckmark: false, // Remove checkmark
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 32),
-            
-            // Product details section (optional, expandable)
-            ProductDetailsSection(
-              isExpanded: _isProductDetailsExpanded,
-              onToggle: () {
-                setState(() {
-                  _isProductDetailsExpanded = !_isProductDetailsExpanded;
-                });
-              },
-              websiteController: _websiteController,
-              videoController: _videoController,
-              appStoreIdController: _appStoreIdController,
-              playStoreIdController: _playStoreIdController,
-            ),
-            const SizedBox(height: 32),
-            
-            // Navigation buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _handleBack,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: const Text('Back'),
-                  ),
+                  }
+                },
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Select a stage';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 24),
+              
+              // What are you looking for section
+              const Text(
+                'What are you looking for?',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _handleFinish,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              const SizedBox(height: 12),
+              
+              // Multi-select chips
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _lookingFor.keys.map((item) {
+                  return FilterChip(
+                    label: Text(item),
+                    selected: _lookingFor[item]!,
+                    onSelected: (selected) {
+                      setState(() {
+                        _lookingFor[item] = selected;
+                      });
+                    },
+                    showCheckmark: false, // Remove checkmark
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 32),
+              
+              // Product details section (optional, expandable)
+              ProductDetailsSection(
+                isExpanded: _isProductDetailsExpanded,
+                onToggle: () {
+                  setState(() {
+                    _isProductDetailsExpanded = !_isProductDetailsExpanded;
+                  });
+                },
+                websiteController: _websiteController,
+                videoController: _videoController,
+                appStoreIdController: _appStoreIdController,
+                playStoreIdController: _playStoreIdController,
+              ),
+              const SizedBox(height: 32),
+              
+              // Navigation buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _handleBack,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text('Back'),
                     ),
-                    child: const Text('Finish'),
                   ),
-                ),
-              ],
-            ),
-          ],
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _handleFinish,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text('Finish'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -970,6 +1054,7 @@ class InvestorOnboardingScreen extends StatefulWidget {
 }
 
 class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _ticketSizeController = TextEditingController();
   
   // Investor type dropdown
@@ -1002,6 +1087,18 @@ class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
   }
 
   void _handleFinish() {
+    if (!(kBypassValidation || (_formKey.currentState?.validate() ?? false))) {
+      return;
+    }
+    if (!kBypassValidation) {
+      final selectedStage = _stagesInterested.values.any((v) => v);
+      if (!selectedStage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Select at least one stage')),
+        );
+        return;
+      }
+    }
     // TODO: Save investor-specific data to Supabase here
     Navigator.pushReplacementNamed(context, '/feed');
   }
@@ -1018,107 +1115,122 @@ class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Tell us about your investment focus',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Tell us about your investment focus',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Investor type dropdown
-            DropdownButtonFormField<String>(
-              initialValue: _investorType,
-              decoration: const InputDecoration(
-                labelText: 'Investor Type *',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.account_balance),
-              ),
-              items: _investorTypes.map((type) {
-                return DropdownMenuItem(
-                  value: type,
-                  child: Text(type),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    _investorType = value;
-                  });
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            
-            // Ticket size
-            TextField(
-              controller: _ticketSizeController,
-              decoration: const InputDecoration(
-                labelText: 'Typical Ticket Size *',
-                hintText: 'e.g., \$25K - \$100K',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.monetization_on),
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Stages interested in
-            const Text(
-              'Stages interested in',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            
-            // Multi-select chips for stages
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _stagesInterested.keys.map((stage) {
-                return FilterChip(
-                  label: Text(stage),
-                  selected: _stagesInterested[stage]!,
-                  onSelected: (selected) {
+              const SizedBox(height: 24),
+              
+              // Investor type dropdown
+              DropdownButtonFormField<String>(
+                value: _investorType,
+                decoration: const InputDecoration(
+                  labelText: 'Investor Type *',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.account_balance),
+                ),
+                items: _investorTypes.map((type) {
+                  return DropdownMenuItem(
+                    value: type,
+                    child: Text(type),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
                     setState(() {
-                      _stagesInterested[stage] = selected;
+                      _investorType = value;
                     });
-                  },
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 32),
-            
-            // Navigation buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _handleBack,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: const Text('Back'),
-                  ),
+                  }
+                },
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Select an investor type';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              
+              // Ticket size
+              TextFormField(
+                controller: _ticketSizeController,
+                decoration: const InputDecoration(
+                  labelText: 'Typical Ticket Size *',
+                  hintText: 'e.g., \$25K - \$100K',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.monetization_on),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _handleFinish,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: const Text('Finish'),
-                  ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Ticket size is required';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 24),
+              
+              // Stages interested in
+              const Text(
+                'Stages interested in',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(height: 12),
+              
+              // Multi-select chips for stages
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _stagesInterested.keys.map((stage) {
+                  return FilterChip(
+                    label: Text(stage),
+                    selected: _stagesInterested[stage]!,
+                    onSelected: (selected) {
+                      setState(() {
+                        _stagesInterested[stage] = selected;
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 32),
+              
+              // Navigation buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _handleBack,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text('Back'),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _handleFinish,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text('Finish'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1138,6 +1250,7 @@ class EndUserOnboardingScreen extends StatefulWidget {
 }
 
 class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
+  final _formKey = GlobalKey<FormState>();
   // Main role dropdown
   String _mainRole = 'Developer';
   final List<String> _roles = [
@@ -1174,6 +1287,18 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
   }
 
   void _handleFinish() {
+    if (!(kBypassValidation || (_formKey.currentState?.validate() ?? false))) {
+      return;
+    }
+    if (!kBypassValidation) {
+      final hasInterest = _lookingFor.values.any((v) => v);
+      if (!hasInterest) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Select at least one interest')),
+        );
+        return;
+      }
+    }
     // TODO: Save end-user-specific data to Supabase here
     Navigator.pushReplacementNamed(context, '/feed');
   }
@@ -1190,116 +1315,131 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Tell us about your interests',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Tell us about your interests',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Main role dropdown
-            DropdownButtonFormField<String>(
-              initialValue: _mainRole,
-              decoration: const InputDecoration(
-                labelText: 'Main Role *',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.work),
-              ),
-              items: _roles.map((role) {
-                return DropdownMenuItem(
-                  value: role,
-                  child: Text(role),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    _mainRole = value;
-                  });
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            
-            // Experience level dropdown
-            DropdownButtonFormField<String>(
-              initialValue: _experienceLevel,
-              decoration: const InputDecoration(
-                labelText: 'Experience Level *',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.bar_chart),
-              ),
-              items: _experienceLevels.map((level) {
-                return DropdownMenuItem(
-                  value: level,
-                  child: Text(level),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    _experienceLevel = value;
-                  });
-                }
-              },
-            ),
-            const SizedBox(height: 24),
-            
-            // What are you looking for section
-            const Text(
-              'What are you looking for?',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            
-            // Checkboxes for interests
-            ..._lookingFor.keys.map((interest) {
-              return CheckboxListTile(
-                title: Text(interest),
-                value: _lookingFor[interest],
+              const SizedBox(height: 24),
+              
+              // Main role dropdown
+              DropdownButtonFormField<String>(
+                value: _mainRole,
+                decoration: const InputDecoration(
+                  labelText: 'Main Role *',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.work),
+                ),
+                items: _roles.map((role) {
+                  return DropdownMenuItem(
+                    value: role,
+                    child: Text(role),
+                  );
+                }).toList(),
                 onChanged: (value) {
-                  setState(() {
-                    _lookingFor[interest] = value ?? false;
-                  });
+                  if (value != null) {
+                    setState(() {
+                      _mainRole = value;
+                    });
+                  }
                 },
-                contentPadding: EdgeInsets.zero,
-              );
-            }).toList(),
-            const SizedBox(height: 32),
-            
-            // Navigation buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _handleBack,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: const Text('Back'),
-                  ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Select a role';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              
+              // Experience level dropdown
+              DropdownButtonFormField<String>(
+                value: _experienceLevel,
+                decoration: const InputDecoration(
+                  labelText: 'Experience Level *',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.bar_chart),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _handleFinish,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: const Text('Finish'),
-                  ),
+                items: _experienceLevels.map((level) {
+                  return DropdownMenuItem(
+                    value: level,
+                    child: Text(level),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      _experienceLevel = value;
+                    });
+                  }
+                },
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Select an experience level';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 24),
+              
+              // What are you looking for section
+              const Text(
+                'What are you looking for?',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(height: 12),
+              
+              // Checkboxes for interests
+              ..._lookingFor.keys.map((interest) {
+                return CheckboxListTile(
+                  title: Text(interest),
+                  value: _lookingFor[interest],
+                  onChanged: (value) {
+                    setState(() {
+                      _lookingFor[interest] = value ?? false;
+                    });
+                  },
+                  contentPadding: EdgeInsets.zero,
+                );
+              }).toList(),
+              const SizedBox(height: 32),
+              
+              // Navigation buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _handleBack,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text('Back'),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _handleFinish,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text('Finish'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
