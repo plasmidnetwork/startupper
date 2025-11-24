@@ -1,6 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+import 'feed/feed_screen.dart';
 
 // ============================================
 // MAIN ENTRY POINT
@@ -1304,51 +1305,3 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
     );
   }
 }
-
-// ============================================
-// FEED SCREEN
-// ============================================
-// Main feed screen after onboarding is complete
-class FeedScreen extends StatelessWidget {
-  const FeedScreen({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Feed'),
-        // Remove back button since we used pushReplacementNamed
-        automaticallyImplyLeading: false,
-      ),
-      body: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.celebration,
-              size: 64,
-              color: Colors.blue,
-            ),
-            SizedBox(height: 24),
-            Text(
-              'Welcome to Startupper feed!',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 12),
-            Text(
-              'Your journey begins here',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
