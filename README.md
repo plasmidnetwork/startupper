@@ -16,7 +16,9 @@ startupper/
 ├── lib/
 │   ├── main.dart          # App shell, auth, onboarding, routing
 │   └── feed/
-│       └── feed_screen.dart  # Feed UI, cards, mocked data
+│       ├── feed_screen.dart    # Feed UI, cards, refresh/load-more
+│       ├── feed_models.dart    # Feed models and enums
+│       └── feed_repository.dart # Mocked data/service layer
 ├── ios/                   # iOS platform files
 ├── macos/                 # macOS platform files
 ├── pubspec.yaml           # Project dependencies and configuration
@@ -104,7 +106,8 @@ startupper/
      - Missions/tasks (reward badge, tags, claim/save CTAs)
      - Investor spotlights (thesis, tags, intro/share CTAs)
    - Filter chips row and role-accented styling
-   - Mocked data powering the feed (no backend yet)
+   - Pull-to-refresh and auto load-more near scroll end
+   - Mocked data powering the feed via `feed_repository.dart` (no backend yet)
 
 ### ✨ Key Features
 
@@ -175,7 +178,7 @@ FeedScreen
 - TextEditingController for form inputs
 - Route arguments for passing selected role
 - File storage for profile images
-- Mocked feed data defined in `lib/feed/feed_screen.dart`
+- Mocked feed data served by `lib/feed/feed_repository.dart`
 
 ## Next Steps
 
@@ -185,7 +188,8 @@ FeedScreen
 - [ ] Integrate Supabase authentication (sign up, login, sessions)
 - [ ] Set up Supabase Storage for profile pictures
 - [ ] Save user profiles to Supabase database
-- [ ] Move feed data to a service layer and wire to backend when ready
+- [x] Move feed data to a service layer and wire to backend when ready
+- [ ] Add empty/skeleton states for feed loading/empty
 
 ### Feature Development
 - [ ] Build out the feed screen with real content (Supabase or API)
