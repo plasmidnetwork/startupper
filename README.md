@@ -15,6 +15,15 @@ Startupper is a Flutter app that connects three types of users in the startup ec
 startupper/
 ├── lib/
 │   ├── main.dart          # App shell, auth, onboarding, routing
+│   ├── app_config.dart    # App-wide config flags (e.g., validation bypass)
+│   ├── auth/
+│   │   └── auth_screen.dart
+│   ├── onboarding/
+│   │   ├── reason_screen.dart
+│   │   ├── common_onboarding_screen.dart
+│   │   ├── founder_onboarding_screen.dart
+│   │   ├── investor_onboarding_screen.dart
+│   │   └── end_user_onboarding_screen.dart
 │   └── feed/
 │       ├── feed_screen.dart    # Feed UI, cards, refresh/load-more
 │       ├── feed_models.dart    # Feed models and enums
@@ -215,7 +224,7 @@ FeedScreen
 
 ## Development Notes
 
-- Most auth/onboarding code still resides in `main.dart`; feed UI lives in `lib/feed/feed_screen.dart`
+- Auth/onboarding code is split into feature files under `lib/auth` and `lib/onboarding`; app shell routes live in `main.dart`
 - No external state management (Provider, Riverpod, etc.) yet
 - Inline form validation implemented; can be bypassed for testing with `--dart-define=BYPASS_VALIDATION=true`
 - No backend integration yet (Supabase ready)
