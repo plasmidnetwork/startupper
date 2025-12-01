@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app_config.dart';
 
 // Auth/login screen with validation and bypass flag support.
@@ -13,6 +14,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _loading = false;
 
   @override
   void dispose() {
@@ -21,15 +23,67 @@ class _AuthScreenState extends State<AuthScreen> {
     super.dispose();
   }
 
-  void _handleLogin() {
-    if (kBypassValidation || (_formKey.currentState?.validate() ?? false)) {
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _handleLogin() async {
+    if (!(kBypassValidation || (_formKey.currentState?.validate() ?? false))) {
+      return;
+    }
+    if (kBypassValidation) {
       Navigator.pushReplacementNamed(context, '/onboarding/reason');
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+      final res = await Supabase.instance.client.auth
+          .signInWithPassword(email: email, password: password);
+      if (!mounted) return;
+      if (res.session != null) {
+        Navigator.pushReplacementNamed(context, '/onboarding/reason');
+      } else {
+        _showError('Login failed. Check your credentials.');
+      }
+    } on AuthException catch (e) {
+      _showError(e.message);
+    } catch (e) {
+      _showError('Unexpected error. Please try again.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _handleSignup() {
-    if (kBypassValidation || (_formKey.currentState?.validate() ?? false)) {
+  Future<void> _handleSignup() async {
+    if (!(kBypassValidation || (_formKey.currentState?.validate() ?? false))) {
+      return;
+    }
+    if (kBypassValidation) {
       Navigator.pushReplacementNamed(context, '/onboarding/reason');
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+      final res = await Supabase.instance.client.auth
+          .signUp(email: email, password: password);
+      if (!mounted) return;
+      if (res.session != null) {
+        Navigator.pushReplacementNamed(context, '/onboarding/reason');
+      } else {
+        _showError('Signup succeeded. Please verify your email to continue.');
+      }
+    } on AuthException catch (e) {
+      _showError(e.message);
+    } catch (e) {
+      _showError('Unexpected error. Please try again.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -104,18 +158,24 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton(
-                      onPressed: _handleLogin,
+                      onPressed: _loading ? null : _handleLogin,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: const Text(
-                        'Login',
-                        style: TextStyle(fontSize: 16),
-                      ),
+                      child: _loading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text(
+                              'Login',
+                              style: TextStyle(fontSize: 16),
+                            ),
                     ),
                     const SizedBox(height: 12),
                     TextButton(
-                      onPressed: _handleSignup,
+                      onPressed: _loading ? null : _handleSignup,
                       child: const Text('Don\'t have an account? Sign up'),
                     ),
                   ],

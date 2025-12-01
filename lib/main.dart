@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'app_config.dart';
 import 'auth/auth_screen.dart';
 import 'feed/feed_screen.dart';
 import 'onboarding/common_onboarding_screen.dart';
@@ -6,8 +8,14 @@ import 'onboarding/end_user_onboarding_screen.dart';
 import 'onboarding/founder_onboarding_screen.dart';
 import 'onboarding/investor_onboarding_screen.dart';
 import 'onboarding/reason_screen.dart';
+import 'theme/app_theme.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: kSupabaseUrl,
+    anonKey: kSupabaseAnonKey,
+  );
   runApp(const StartupperApp());
 }
 
@@ -16,13 +24,13 @@ class StartupperApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final initialRoute = Supabase.instance.client.auth.currentSession != null
+        ? '/feed'
+        : '/auth';
     return MaterialApp(
       title: 'Startupper',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-      ),
-      initialRoute: '/auth',
+      theme: AppTheme.light(),
+      initialRoute: initialRoute,
       routes: {
         '/auth': (context) => const AuthScreen(),
         '/onboarding/reason': (context) => const ReasonScreen(),

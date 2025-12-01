@@ -19,6 +19,7 @@ dependencies:
   
   # Image picker for profile pictures
   image_picker: ^1.0.4
+  supabase_flutter: ^2.5.5
 
 # Development dependencies are only used during development
 dev_dependencies:
@@ -41,4 +42,3 @@ flutter:
   # Add images/assets here if needed
   # assets:
   #   - images/logo.png
-

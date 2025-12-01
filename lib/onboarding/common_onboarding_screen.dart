@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../app_config.dart';
+import '../theme/spacing.dart';
 
 class CommonOnboardingScreen extends StatefulWidget {
   const CommonOnboardingScreen({Key? key}) : super(key: key);
@@ -130,7 +131,7 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: gapXL),
               Center(
                 child: Column(
                   children: [
@@ -162,7 +163,7 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
                             : null,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: gapSM),
                     TextButton.icon(
                       onPressed: _showImageSourceOptions,
                       icon: const Icon(Icons.camera_alt, size: 18),
@@ -173,7 +174,7 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: gapXL),
               TextFormField(
                 controller: _nameController,
                 decoration: const InputDecoration(
@@ -188,7 +189,7 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: gapMD),
               TextFormField(
                 controller: _headlineController,
                 decoration: const InputDecoration(
@@ -204,7 +205,7 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: gapMD),
               TextFormField(
                 controller: _locationController,
                 decoration: const InputDecoration(
@@ -220,7 +221,7 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: gapLG),
               SwitchListTile(
                 title: const Text('Available for freelancing?'),
                 subtitle: const Text('Let startups know you\'re open to projects'),
@@ -232,7 +233,7 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
                 },
                 contentPadding: const EdgeInsets.symmetric(horizontal: 8),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: gapXL),
               Row(
                 children: [
                   Expanded(

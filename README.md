@@ -24,6 +24,9 @@ startupper/
 │   │   ├── founder_onboarding_screen.dart
 │   │   ├── investor_onboarding_screen.dart
 │   │   └── end_user_onboarding_screen.dart
+│   ├── theme/
+│   │   ├── app_theme.dart     # Centralized theming, buttons, chips, cards
+│   │   └── spacing.dart       # Shared spacing tokens
 │   └── feed/
 │       ├── feed_screen.dart    # Feed UI, cards, refresh/load-more
 │       ├── feed_models.dart    # Feed models and enums
@@ -56,10 +59,14 @@ startupper/
 3. Run the app:
    ```bash
    # On iOS device
-   flutter run -d <device-id>
+   flutter run --dart-define=SUPABASE_URL=<url> --dart-define=SUPABASE_ANON_KEY=<anon-key> -d <device-id>
    
    # On macOS
-   flutter run -d macos
+   flutter run --dart-define=SUPABASE_URL=<url> --dart-define=SUPABASE_ANON_KEY=<anon-key> -d macos
+   ```
+   Optional test bypass for validation:
+   ```bash
+   --dart-define=BYPASS_VALIDATION=true
    ```
 
 ## Current Implementation
@@ -166,6 +173,11 @@ dependencies:
   cupertino_icons: ^1.0.2
   image_picker: ^1.0.4      # Profile picture uploads
 ```
+
+## Backend Schema (Supabase)
+
+- See `supabase/schema.sql` for tables, indexes, and RLS policies (profiles, role details, feed_items).
+- Create a project in Supabase, copy `SUPABASE_URL` and `SUPABASE_ANON_KEY`, apply `supabase/schema.sql` via SQL editor or `supabase db push`, then run the app with the dart-defines above.
 
 ## Architecture
 

@@ -1,0 +1,249 @@
+# Roadmap
+
+## Phase 1 — Core Platform
+
+**Schemas & RLS (Supabase)**
+- `profiles (id uuid pk -> auth.users, email text, full_name text, headline text, location text, role text, avatar_url text, available_for_freelancing bool, created_at timestamptz default now())`
+- `founder_details (user_id uuid pk fk profiles, startup_name text, pitch text, stage text, looking_for text[], website text, demo_video text, app_store_id text, play_store_id text, created_at timestamptz default now())`
+- `investor_details (user_id uuid pk fk profiles, investor_type text, ticket_size text, stages text[], created_at timestamptz default now())`
+- `enduser_details (user_id uuid pk fk profiles, main_role text, experience_level text, interests text[], created_at timestamptz default now())`
+- `feed_items (id uuid pk default gen_random_uuid(), user_id uuid fk profiles, type text check in (update, highlight, mission, investor), content jsonb, created_at timestamptz default now())`
+- Indexes: profiles(id), founder_details(user_id), investor_details(user_id), enduser_details(user_id); feed_items(created_at desc), feed_items(type), feed_items(user_id), partial index on feed_items(featured=true)
+- RLS: enable; `select` allowed to authenticated users; `insert/update/delete` only by row owner (`auth.uid() = user_id`); content validation via check constraints where possible.
+- `feed_items.content` JSON shape (proposal):
+  - common: `title:string`, `subtitle:string`, `ask?:string`, `tags?:string[]`, `metrics?:[{label,value,color?}]`, `featured?:bool`
+  - mission: `reward?:string`, `effort?:string`
+  - investor: `thesis?:string`, `office_hours?:string`
+  - highlight/update: `role?:string`, `cta_label?:string`
+
+**SQL snippets (Supabase)**
+```sql
+create table public.profiles (
+  id uuid primary key references auth.users on delete cascade,
+  email text not null unique,
+  full_name text,
+  headline text,
+  location text,
+  role text,
+  avatar_url text,
+  available_for_freelancing boolean default false,
+  created_at timestamptz default now()
+);
+
+create table public.founder_details (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  startup_name text,
+  pitch text,
+  stage text,
+  looking_for text[],
+  website text,
+  demo_video text,
+  app_store_id text,
+  play_store_id text,
+  created_at timestamptz default now()
+);
+
+create table public.investor_details (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  investor_type text,
+  ticket_size text,
+  stages text[],
+  created_at timestamptz default now()
+);
+
+create table public.enduser_details (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  main_role text,
+  experience_level text,
+  interests text[],
+  created_at timestamptz default now()
+);
+
+create table public.feed_items (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete cascade,
+  type text check (type in ('update','highlight','mission','investor')),
+  content jsonb not null,
+  created_at timestamptz default now()
+);
+
+create index on public.feed_items (created_at desc);
+create index on public.feed_items (type);
+create index on public.feed_items (user_id);
+create index feed_items_featured_idx on public.feed_items ((content->>'featured')) where (content->>'featured')::boolean = true;
+
+alter table public.profiles enable row level security;
+alter table public.founder_details enable row level security;
+alter table public.investor_details enable row level security;
+alter table public.enduser_details enable row level security;
+alter table public.feed_items enable row level security;
+
+create policy "Profiles are viewable by authenticated" on public.profiles
+  for select using (auth.role() = 'authenticated');
+create policy "Users manage their own profile" on public.profiles
+  for all using (auth.uid() = id) with check (auth.uid() = id);
+
+create policy "Founders manage their details" on public.founder_details
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "Investors manage their details" on public.investor_details
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "End-users manage their details" on public.enduser_details
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "Feed readable by authenticated" on public.feed_items
+  for select using (auth.role() = 'authenticated');
+create policy "Feed writes by owner" on public.feed_items
+  for insert with check (auth.uid() = user_id);
+create policy "Feed updates by owner" on public.feed_items
+  for update using (auth.uid() = user_id);
+create policy "Feed deletes by owner" on public.feed_items
+  for delete using (auth.uid() = user_id);
+```
+
+1. **Authentication + Session Handling**
+
+   - Integrate Supabase Auth.
+   - Persist sessions locally.
+   - Auto-redirect:
+     - new user → onboarding.
+     - returning user → feed.
+
+2. **Supabase User Profiles**
+
+   - Implement tables: `profiles`, `founder_details`, `investor_details`, `enduser_details`.
+   - Save all onboarding data here.
+
+3. **Supabase Storage**
+
+   - Upload profile photos.
+   - Store URLs in `profiles.avatar_url`.
+   - Later support startup logos and hero banners.
+
+4. **Feed Backend**
+
+   - Create table: `feed_items`.
+   - Columns: `id`, `user_id`, `type (update/highlight/mission/investor)`, `content (JSONB)`, `created_at`.
+   - JSONB shape (proposal):
+     - `title: string`, `subtitle: string`, `ask?: string`, `tags?: string[]`, `metrics?: [{label, value, color?}]`, `reward?`, `featured?: bool`, `role?: string`
+   - Indexes: `created_at DESC`, `type`, `user_id`; consider partial index on featured
+   - RLS: users can select all published items; inserts only by authenticated users
+   - Connect feed screen, load real content, and paginate.
+
+5. **Improve UX polish**
+
+   - Loading states.
+   - Error handling.
+   - Skeleton screens.
+   - Network retry logic.
+   - Empty states for onboarding and feed.
+   - Offline tolerance (graceful errors).
+
+6. **Testing & CI (add early)**
+
+   - Widget tests: auth/onboarding validation gating and bypass flag.
+   - Feed list renders and overflow regression test.
+   - CI: format/analyze/test on PR (GitHub Actions).
+
+## Phase 2 — Startup Profiles (High-Impact Release)
+
+Goal: Every founder gets a mini startup landing page inside the app.
+
+6. **Founder “Startup Page”**
+
+   - Includes logo/banner, one-liner, stage, product links, traction section, optional team members, latest updates, founder posts related to the startup.
+   - Users can “Follow Startup,” which influences the feed.
+
+7. **Startup Search + Discovery**
+
+   - Browsable list of startups.
+   - Filters: stage, sector, what they’re looking for, recently active, featured.
+
+## Phase 3 — Social Graph + Engagement Layer
+
+8. **Following System**
+
+   - Tables: `follows_users`, `follows_startups`.
+   - Enables personalized feed, notifications, better discovery.
+
+9. **Engagement System**
+
+   - Support applaud (like), comment, “Interested” button, save/bookmark posts, share profile or startup.
+   - Add counters to `feed_items.metrics`.
+   - Rate limiting, spam protection, and moderation/reporting hooks.
+
+10. **Notifications**
+
+   - Types: someone followed you, someone commented, your startup got a new investor interest, new mission available, weekly digest.
+   - Decide on push vs. in-app; store notifications with read/unread.
+
+## Phase 4 — Collaboration Layer (The Magic)
+
+11. **Missions 2.0**
+
+   - Founders can post mission prompts like “Need feedback on onboarding,” “Looking for UI suggestions,” “Testing weekend: try our beta,” “Small task: find bugs.”
+   - Users claim missions, complete them, and founders approve.
+
+12. **Integrated Tasks + Micro-rewards**
+
+   - Possible future features: XP system, reputation for helpers, startup badges, mission leaderboard.
+   - Focused on creating community-driven startup building.
+
+## Phase 5 — Investor Tools
+
+13. **Investor Profiles 2.0**
+
+   - Public profile, thesis, ticket range, sector tags, optional portfolio.
+
+14. **Matching Engine**
+
+   - Match based on stage, sector, traction, geography, investor preferences.
+   - Investors see “10 startups that match your thesis.”
+   - Founders see “These investors match your startup.”
+
+## Phase 6 — Messaging & Introductions
+
+15. **DM System**
+
+   - 1:1 messaging with basic attachments, unread badges, and inbox tab showing thread list.
+
+16. **Warm Intro Requests**
+
+   - Enable structured, safe intro requests from founders to investors and users to founders.
+   - Abuse controls and rate limits.
+
+## Phase 7 — Monetization & Scaling
+
+17. **Pro Upgrades**
+
+   - For founders: visibility boosts, featured startup placement, analytics (views, follows, engagement).
+   - For investors: dealflow dashboard, match recommendations, private notes.
+
+18. **Startup Jobs & Freelance Marketplace**
+
+   - Founders post roles, end users apply, include founder/freelancer ratings, messaging, and project board.
+   - Moderation and anti-spam needed for postings.
+
+19. **Analytics**
+
+   - Tracking startup page visits, user insights, feed performance, and weekly email reports.
+   - Respect privacy; define retention windows and aggregation.
+
+## Phase 8 — Web App + Android Launch
+
+20. **Add Flutter Web**
+
+   - Support login, feed, discovery, startup profiles, and lightweight onboarding.
+
+21. **Add Android platform support**
+
+   - Support camera, storage, routing, and testing across devices.
+
+## Final Vision
+
+Startupper becomes “LinkedIn for startup creation,” but faster, cleaner, and focused on early-stage builders.
+
+It becomes a place where:
+   - Founders find support.
+   - Investors find dealflow.
+   - Users contribute to startups.
+   - Communities build together.

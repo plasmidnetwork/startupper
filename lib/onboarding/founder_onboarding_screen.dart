@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app_config.dart';
+import '../theme/spacing.dart';
 
 class FounderOnboardingScreen extends StatefulWidget {
   const FounderOnboardingScreen({Key? key}) : super(key: key);
@@ -78,7 +79,7 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: gapLG),
               TextFormField(
                 controller: _startupNameController,
                 decoration: const InputDecoration(
@@ -93,7 +94,7 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: gapMD),
               TextFormField(
                 controller: _pitchController,
                 decoration: const InputDecoration(
@@ -111,9 +112,9 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: gapMD),
               DropdownButtonFormField<String>(
-                value: _selectedStage,
+                initialValue: _selectedStage,
                 decoration: const InputDecoration(
                   labelText: 'Stage *',
                   border: OutlineInputBorder(),
@@ -139,7 +140,7 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: gapLG),
               const Text(
                 'What are you looking for?',
                 style: TextStyle(
@@ -147,7 +148,7 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: gapSM),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -164,7 +165,7 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
                   );
                 }).toList(),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: gapXL),
               ProductDetailsSection(
                 isExpanded: _isProductDetailsExpanded,
                 onToggle: () {
@@ -177,7 +178,7 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
                 appStoreIdController: _appStoreIdController,
                 playStoreIdController: _playStoreIdController,
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: gapXL),
               Row(
                 children: [
                   Expanded(

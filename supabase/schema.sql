@@ -1,0 +1,92 @@
+-- Supabase schema for Startupper core data
+-- Run with: supabase db push (or psql) before wiring the app
+
+create table if not exists public.profiles (
+  id uuid primary key references auth.users on delete cascade,
+  email text not null unique,
+  full_name text,
+  headline text,
+  location text,
+  role text,
+  avatar_url text,
+  available_for_freelancing boolean default false,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.founder_details (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  startup_name text,
+  pitch text,
+  stage text,
+  looking_for text[],
+  website text,
+  demo_video text,
+  app_store_id text,
+  play_store_id text,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.investor_details (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  investor_type text,
+  ticket_size text,
+  stages text[],
+  created_at timestamptz default now()
+);
+
+create table if not exists public.enduser_details (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  main_role text,
+  experience_level text,
+  interests text[],
+  created_at timestamptz default now()
+);
+
+create table if not exists public.feed_items (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete cascade,
+  type text check (type in ('update','highlight','mission','investor')),
+  content jsonb not null,
+  created_at timestamptz default now()
+);
+
+-- Indexes
+create index if not exists idx_feed_items_created_at on public.feed_items (created_at desc);
+create index if not exists idx_feed_items_type on public.feed_items (type);
+create index if not exists idx_feed_items_user on public.feed_items (user_id);
+create index if not exists feed_items_featured_idx on public.feed_items ((content->>'featured')) where (content->>'featured')::boolean = true;
+
+-- Enable RLS
+alter table public.profiles enable row level security;
+alter table public.founder_details enable row level security;
+alter table public.investor_details enable row level security;
+alter table public.enduser_details enable row level security;
+alter table public.feed_items enable row level security;
+
+-- RLS policies
+create policy if not exists "Profiles are viewable by authenticated" on public.profiles
+  for select using (auth.role() = 'authenticated');
+create policy if not exists "Users manage their own profile" on public.profiles
+  for all using (auth.uid() = id) with check (auth.uid() = id);
+
+create policy if not exists "Founders manage their details" on public.founder_details
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy if not exists "Investors manage their details" on public.investor_details
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy if not exists "End-users manage their details" on public.enduser_details
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy if not exists "Feed readable by authenticated" on public.feed_items
+  for select using (auth.role() = 'authenticated');
+create policy if not exists "Feed writes by owner" on public.feed_items
+  for insert with check (auth.uid() = user_id);
+create policy if not exists "Feed updates by owner" on public.feed_items
+  for update using (auth.uid() = user_id);
+create policy if not exists "Feed deletes by owner" on public.feed_items
+  for delete using (auth.uid() = user_id);
+
+-- Suggested content shape (for reference)
+-- common: title text, subtitle text, ask text?, tags text[]?, metrics jsonb? [{label,value,color?}], featured bool?
+-- mission: reward text?, effort text?
+-- investor: thesis text?, office_hours text?
+-- highlight/update: role text?, cta_label text?

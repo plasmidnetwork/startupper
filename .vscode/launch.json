@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flutter (iPhone)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--dart-define=SUPABASE_URL=https://xxwqsiluoajmqmkqbxai.supabase.co",
+        "--dart-define=SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4d3FzaWx1b2FqbXFta3FieGFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzODkwMjksImV4cCI6MjA3OTk2NTAyOX0.t7cK6saUKB9w_k2MVGyKQ-2Lf5q1oD1DKjtLmVwyBmY"
+      ]
+    },
+    {
+      "name": "Flutter (macOS)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "macos",
+      "toolArgs": [
+        "--dart-define=SUPABASE_URL=https://xxwqsiluoajmqmkqbxai.supabase.co",
+        "--dart-define=SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4d3FzaWx1b2FqbXFta3FieGFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzODkwMjksImV4cCI6MjA3OTk2NTAyOX0.t7cK6saUKB9w_k2MVGyKQ-2Lf5q1oD1DKjtLmVwyBmY"
+      ]
+    }
+  ]
+}

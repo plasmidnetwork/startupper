@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/spacing.dart';
 
 class ReasonScreen extends StatefulWidget {
   const ReasonScreen({Key? key}) : super(key: key);
@@ -65,7 +66,7 @@ class _ReasonScreenState extends State<ReasonScreen> {
           },
           borderRadius: BorderRadius.circular(16),
           child: Padding(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.all(gapXL),
             child: Column(
               children: [
                 Icon(
@@ -123,29 +124,29 @@ class _ReasonScreenState extends State<ReasonScreen> {
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: gapXL),
             _buildRoleCard(
               'Founder',
               Icons.rocket_launch,
               'Build and grow your startup',
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: gapMD),
             _buildRoleCard(
               'Investor',
               Icons.attach_money,
               'Discover and fund startups',
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: gapMD),
             _buildRoleCard(
               'End-user',
               Icons.people,
               'Join startups or test products',
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: gapXL),
             ElevatedButton(
               onPressed: _selectedRole != null ? _handleContinue : null,
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: gapMD),
               ),
               child: const Text(
                 'Continue',

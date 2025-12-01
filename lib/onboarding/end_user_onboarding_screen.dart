@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app_config.dart';
+import '../theme/spacing.dart';
 
 class EndUserOnboardingScreen extends StatefulWidget {
   const EndUserOnboardingScreen({Key? key}) : super(key: key);
@@ -83,9 +84,9 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: gapLG),
               DropdownButtonFormField<String>(
-                value: _mainRole,
+                initialValue: _mainRole,
                 decoration: const InputDecoration(
                   labelText: 'Main Role *',
                   border: OutlineInputBorder(),
@@ -111,9 +112,9 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: gapMD),
               DropdownButtonFormField<String>(
-                value: _experienceLevel,
+                initialValue: _experienceLevel,
                 decoration: const InputDecoration(
                   labelText: 'Experience Level *',
                   border: OutlineInputBorder(),
@@ -139,7 +140,7 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: gapLG),
               const Text(
                 'What are you looking for?',
                 style: TextStyle(
@@ -147,7 +148,7 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: gapSM),
               ..._lookingFor.keys.map((interest) {
                 return CheckboxListTile(
                   title: Text(interest),
@@ -160,7 +161,7 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
                   contentPadding: EdgeInsets.zero,
                 );
               }).toList(),
-              const SizedBox(height: 32),
+              const SizedBox(height: gapXL),
               Row(
                 children: [
                   Expanded(

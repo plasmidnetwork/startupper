@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app_config.dart';
+import '../theme/spacing.dart';
 
 class InvestorOnboardingScreen extends StatefulWidget {
   const InvestorOnboardingScreen({Key? key}) : super(key: key);
@@ -80,9 +81,9 @@ class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: gapLG),
               DropdownButtonFormField<String>(
-                value: _investorType,
+                initialValue: _investorType,
                 decoration: const InputDecoration(
                   labelText: 'Investor Type *',
                   border: OutlineInputBorder(),
@@ -108,7 +109,7 @@ class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: gapMD),
               TextFormField(
                 controller: _ticketSizeController,
                 decoration: const InputDecoration(
@@ -124,7 +125,7 @@ class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: gapLG),
               const Text(
                 'Stages interested in',
                 style: TextStyle(
@@ -132,7 +133,7 @@ class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: gapSM),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -148,7 +149,7 @@ class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
                   );
                 }).toList(),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: gapXL),
               Row(
                 children: [
                   Expanded(
