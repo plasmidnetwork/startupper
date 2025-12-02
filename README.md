@@ -152,7 +152,8 @@ startupper/
 - ✅ Profile picture upload with image picker
   - Choose from gallery or take photo
   - Automatic resize (1024x1024) and compression
-  - Circular avatar with border
+  - Uploaded to Supabase Storage (`avatars` bucket) with public URLs
+  - Displayed in feed cards via `NetworkImage`
 - ✅ Character limits on text fields (300 chars for pitch)
 - ✅ Multi-line text inputs where appropriate
 - ✅ Proper keyboard types (URL, email, number)
