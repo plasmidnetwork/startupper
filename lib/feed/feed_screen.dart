@@ -662,13 +662,18 @@ class AvatarNameRow extends StatelessWidget {
       children: [
         CircleAvatar(
           backgroundColor: accent.withOpacity(0.16),
-          child: Text(
-            initial,
-            style: TextStyle(
-              color: accent,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          backgroundImage: (author.avatarUrl != null && author.avatarUrl!.isNotEmpty)
+              ? NetworkImage(author.avatarUrl!)
+              : null,
+          child: (author.avatarUrl == null || author.avatarUrl!.isEmpty)
+              ? Text(
+                  initial,
+                  style: TextStyle(
+                    color: accent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                )
+              : null,
         ),
         const SizedBox(width: 12),
         Expanded(

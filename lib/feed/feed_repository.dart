@@ -48,6 +48,7 @@ class FeedRepository {
     final authorName = user['full_name']?.toString();
     final authorRole = user['role']?.toString() ?? '';
     final authorAffiliation = user['headline']?.toString() ?? '';
+    final avatarUrl = user['avatar_url']?.toString();
     final timeAgo = _formatTimeAgo(createdAt);
 
     return FeedCardData(
@@ -57,6 +58,7 @@ class FeedRepository {
         role: authorRole.isNotEmpty ? authorRole : 'Member',
         affiliation: authorAffiliation,
         timeAgo: timeAgo,
+        avatarUrl: avatarUrl?.isNotEmpty == true ? avatarUrl : null,
       ),
       title: content['title']?.toString() ?? 'Update',
       subtitle: content['subtitle']?.toString() ?? '',

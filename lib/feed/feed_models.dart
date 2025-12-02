@@ -8,12 +8,14 @@ class FeedAuthor {
     required this.role,
     required this.affiliation,
     required this.timeAgo,
+    this.avatarUrl,
   });
 
   final String name;
   final String role;
   final String affiliation;
   final String timeAgo;
+  final String? avatarUrl;
 }
 
 class MetricHighlight {

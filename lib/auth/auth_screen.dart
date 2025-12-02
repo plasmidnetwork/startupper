@@ -34,12 +34,15 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _ensureProfile(User user) async {
     final supabase = Supabase.instance.client;
     try {
-      await supabase.from('profiles').upsert({
-        'id': user.id,
-        'email': user.email,
-      });
+      await supabase.from('profiles').upsert(
+        {
+          'id': user.id,
+          'email': user.email,
+        },
+        onConflict: 'id',
+      );
     } catch (e) {
-      // Non-fatal: log to console for now
+      // Non-fatal for signup flow; log to console.
       // ignore: avoid_print
       print('Profile upsert skipped: $e');
     }
@@ -95,10 +98,8 @@ class _AuthScreenState extends State<AuthScreen> {
         emailRedirectTo: kEmailRedirectTo.isEmpty ? null : kEmailRedirectTo,
       );
       if (!mounted) return;
-      if (res.user != null) {
+      if (res.session != null && res.user != null) {
         await _ensureProfile(res.user!);
-      }
-      if (res.session != null) {
         await _redirectAfterAuth();
       } else {
         _showError('Signup succeeded. Please verify your email to continue.');
