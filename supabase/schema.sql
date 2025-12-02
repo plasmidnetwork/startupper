@@ -63,27 +63,61 @@ alter table public.investor_details enable row level security;
 alter table public.enduser_details enable row level security;
 alter table public.feed_items enable row level security;
 
--- RLS policies
-create policy if not exists "Profiles are viewable by authenticated" on public.profiles
+-- RLS policies (drop existing first to avoid conflicts)
+drop policy if exists "Profiles are viewable by authenticated" on public.profiles;
+drop policy if exists "Users manage their own profile" on public.profiles;
+drop policy if exists "Founders manage their details" on public.founder_details;
+drop policy if exists "Investors manage their details" on public.investor_details;
+drop policy if exists "End-users manage their details" on public.enduser_details;
+drop policy if exists "Feed readable by authenticated" on public.feed_items;
+drop policy if exists "Feed writes by owner" on public.feed_items;
+drop policy if exists "Feed updates by owner" on public.feed_items;
+drop policy if exists "Feed deletes by owner" on public.feed_items;
+
+create policy "Profiles are viewable by authenticated" on public.profiles
   for select using (auth.role() = 'authenticated');
-create policy if not exists "Users manage their own profile" on public.profiles
+create policy "Users manage their own profile" on public.profiles
   for all using (auth.uid() = id) with check (auth.uid() = id);
 
-create policy if not exists "Founders manage their details" on public.founder_details
+create policy "Founders manage their details" on public.founder_details
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy if not exists "Investors manage their details" on public.investor_details
+create policy "Investors manage their details" on public.investor_details
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy if not exists "End-users manage their details" on public.enduser_details
+create policy "End-users manage their details" on public.enduser_details
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-create policy if not exists "Feed readable by authenticated" on public.feed_items
+create policy "Feed readable by authenticated" on public.feed_items
   for select using (auth.role() = 'authenticated');
-create policy if not exists "Feed writes by owner" on public.feed_items
+create policy "Feed writes by owner" on public.feed_items
   for insert with check (auth.uid() = user_id);
-create policy if not exists "Feed updates by owner" on public.feed_items
+create policy "Feed updates by owner" on public.feed_items
   for update using (auth.uid() = user_id);
-create policy if not exists "Feed deletes by owner" on public.feed_items
+create policy "Feed deletes by owner" on public.feed_items
   for delete using (auth.uid() = user_id);
+
+-- Storage policies for avatars bucket (create the bucket named 'avatars' in Storage UI)
+drop policy if exists "Avatar upload" on storage.objects;
+drop policy if exists "Avatar read" on storage.objects;
+drop policy if exists "Avatar update own" on storage.objects;
+drop policy if exists "Avatar delete own" on storage.objects;
+
+create policy "Avatar upload" on storage.objects
+  for insert
+  with check (bucket_id = 'avatars' and auth.role() = 'authenticated');
+
+-- Allow reads from avatars bucket (public). Tighten to authenticated if preferred.
+create policy "Avatar read" on storage.objects
+  for select
+  using (bucket_id = 'avatars');
+
+create policy "Avatar update own" on storage.objects
+  for update
+  using (bucket_id = 'avatars' and owner = auth.uid())
+  with check (bucket_id = 'avatars' and owner = auth.uid());
+
+create policy "Avatar delete own" on storage.objects
+  for delete
+  using (bucket_id = 'avatars' and owner = auth.uid());
 
 -- Suggested content shape (for reference)
 -- common: title text, subtitle text, ask text?, tags text[]?, metrics jsonb? [{label,value,color?}], featured bool?

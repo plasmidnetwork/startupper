@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app_config.dart';
+import '../services/supabase_service.dart';
 
 // Auth/login screen with validation and bypass flag support.
 class AuthScreen extends StatefulWidget {
@@ -15,6 +16,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _loading = false;
+  final _supabaseService = SupabaseService();
 
   @override
   void dispose() {
@@ -27,6 +29,20 @@ class _AuthScreenState extends State<AuthScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  Future<void> _ensureProfile(User user) async {
+    final supabase = Supabase.instance.client;
+    try {
+      await supabase.from('profiles').upsert({
+        'id': user.id,
+        'email': user.email,
+      });
+    } catch (e) {
+      // Non-fatal: log to console for now
+      // ignore: avoid_print
+      print('Profile upsert skipped: $e');
+    }
   }
 
   Future<void> _handleLogin() async {
@@ -45,7 +61,10 @@ class _AuthScreenState extends State<AuthScreen> {
           .signInWithPassword(email: email, password: password);
       if (!mounted) return;
       if (res.session != null) {
-        Navigator.pushReplacementNamed(context, '/onboarding/reason');
+        if (res.user != null) {
+          await _ensureProfile(res.user!);
+        }
+        await _redirectAfterAuth();
       } else {
         _showError('Login failed. Check your credentials.');
       }
@@ -70,11 +89,17 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
-      final res = await Supabase.instance.client.auth
-          .signUp(email: email, password: password);
+      final res = await Supabase.instance.client.auth.signUp(
+        email: email,
+        password: password,
+        emailRedirectTo: kEmailRedirectTo.isEmpty ? null : kEmailRedirectTo,
+      );
       if (!mounted) return;
+      if (res.user != null) {
+        await _ensureProfile(res.user!);
+      }
       if (res.session != null) {
-        Navigator.pushReplacementNamed(context, '/onboarding/reason');
+        await _redirectAfterAuth();
       } else {
         _showError('Signup succeeded. Please verify your email to continue.');
       }
@@ -82,6 +107,25 @@ class _AuthScreenState extends State<AuthScreen> {
       _showError(e.message);
     } catch (e) {
       _showError('Unexpected error. Please try again.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _redirectAfterAuth() async {
+    try {
+      final profile = await _supabaseService.fetchProfile();
+      if (!mounted) return;
+      final role = profile?['role'] as String?;
+      if (role != null && role.isNotEmpty) {
+        Navigator.pushNamedAndRemoveUntil(context, '/feed', (route) => false);
+      } else {
+        Navigator.pushReplacementNamed(context, '/onboarding/reason');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      // On failure to fetch profile, default to onboarding.
+      Navigator.pushReplacementNamed(context, '/onboarding/reason');
     } finally {
       if (mounted) setState(() => _loading = false);
     }

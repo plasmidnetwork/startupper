@@ -12,10 +12,30 @@ import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(
-    url: kSupabaseUrl,
-    anonKey: kSupabaseAnonKey,
-  );
+  
+  // Validate Supabase credentials before initialization
+  if (kSupabaseUrl.isEmpty || kSupabaseAnonKey.isEmpty) {
+    print('ERROR: Supabase credentials are missing!');
+    print('Make sure to run with --dart-define flags:');
+    print('  --dart-define=SUPABASE_URL=your-url');
+    print('  --dart-define=SUPABASE_ANON_KEY=your-key');
+    // Still run the app so user sees an error message
+    runApp(const StartupperApp());
+    return;
+  }
+  
+  try {
+    await Supabase.initialize(
+      url: kSupabaseUrl,
+      anonKey: kSupabaseAnonKey,
+    );
+    print('Supabase initialized successfully');
+  } catch (e, stackTrace) {
+    print('ERROR: Failed to initialize Supabase: $e');
+    print('Stack trace: $stackTrace');
+    // Continue running the app - it will show an error when trying to use Supabase
+  }
+  
   runApp(const StartupperApp());
 }
 

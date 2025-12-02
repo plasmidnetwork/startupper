@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_models.dart';
 import 'feed_repository.dart';
 
@@ -113,6 +114,18 @@ class _FeedScreenState extends State<FeedScreen> {
       appBar: AppBar(
         title: const Text('Feed'),
         automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Log out',
+            onPressed: () async {
+              await Supabase.instance.client.auth.signOut();
+              if (!mounted) return;
+              Navigator.pushNamedAndRemoveUntil(
+                  context, '/auth', (route) => false);
+            },
+          ),
+        ],
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -884,112 +897,59 @@ class _FeedSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SliverToBoxAdapter(
-      child: Column(
-        children: List.generate(3, (index) {
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
           return Padding(
             padding: EdgeInsets.fromLTRB(16, index == 0 ? 16 : 12, 16, 4),
-            child: const _ShimmerSkeletonCard(),
+            child: const _SkeletonCard(),
           );
-        }),
+        },
+        childCount: 3,
       ),
     );
   }
 }
 
-class _ShimmerSkeletonCard extends StatefulWidget {
-  const _ShimmerSkeletonCard();
-
-  @override
-  State<_ShimmerSkeletonCard> createState() => _ShimmerSkeletonCardState();
-}
-
-class _ShimmerSkeletonCardState extends State<_ShimmerSkeletonCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _shimmer;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1200),
-      vsync: this,
-    )..repeat();
-    _shimmer = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+class _SkeletonCard extends StatelessWidget {
+  const _SkeletonCard();
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final base = theme.colorScheme.surfaceContainerHighest;
-    return AnimatedBuilder(
-      animation: _shimmer,
-      builder: (context, child) {
-        return ShaderMask(
-          shaderCallback: (rect) {
-            final gradient = LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: [
-                base.withOpacity(0.5),
-                base.withOpacity(0.2),
-                base.withOpacity(0.5),
+    final base = Theme.of(context).colorScheme.surfaceVariant;
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _block(base, width: 120, height: 14),
+            const SizedBox(height: 10),
+            _block(base, width: double.infinity, height: 14),
+            const SizedBox(height: 8),
+            _block(base, width: double.infinity, height: 14),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _chip(base, width: 70),
+                const SizedBox(width: 8),
+                _chip(base, width: 70),
+                const SizedBox(width: 8),
+                _chip(base, width: 70),
               ],
-              stops: [
-                (_shimmer.value - 0.3).clamp(0.0, 1.0),
-                (_shimmer.value).clamp(0.0, 1.0),
-                (_shimmer.value + 0.3).clamp(0.0, 1.0),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _block(base, width: 80, height: 12),
+                const SizedBox(width: 12),
+                _block(base, width: 80, height: 12),
+                const Spacer(),
+                _block(base, width: 40, height: 12),
               ],
-            );
-            return gradient.createShader(rect);
-          },
-          blendMode: BlendMode.srcATop,
-          child: child,
-        );
-      },
-      child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _block(base, width: 120, height: 14),
-              const SizedBox(height: 10),
-              _block(base, width: double.infinity, height: 14),
-              const SizedBox(height: 8),
-              _block(base, width: double.infinity, height: 14),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  _chip(base, width: 70),
-                  const SizedBox(width: 8),
-                  _chip(base, width: 70),
-                  const SizedBox(width: 8),
-                  _chip(base, width: 70),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  _block(base, width: 80, height: 12),
-                  const SizedBox(width: 12),
-                  _block(base, width: 80, height: 12),
-                  const Spacer(),
-                  _block(base, width: 40, height: 12),
-                ],
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app_config.dart';
+import '../services/supabase_service.dart';
 import '../theme/spacing.dart';
 
 class EndUserOnboardingScreen extends StatefulWidget {
@@ -39,6 +40,8 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
     'Test products': false,
     'Maybe co-found later': false,
   };
+  final _supabaseService = SupabaseService();
+  bool _saving = false;
 
   void _handleBack() {
     Navigator.pop(context);
@@ -57,7 +60,33 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
         return;
       }
     }
-    Navigator.pushReplacementNamed(context, '/feed');
+    if (kBypassValidation) {
+      Navigator.pushReplacementNamed(context, '/feed');
+      return;
+    }
+    _saveEndUser();
+  }
+
+  Future<void> _saveEndUser() async {
+    setState(() => _saving = true);
+    try {
+      await _supabaseService.upsertEndUserDetails(
+        mainRole: _mainRole,
+        experienceLevel: _experienceLevel,
+        interests: _lookingFor.entries
+            .where((e) => e.value)
+            .map((e) => e.key)
+            .toList(),
+      );
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/feed');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save your details: $e')),
+      );
+      setState(() => _saving = false);
+    }
   }
 
   @override
@@ -166,7 +195,7 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _handleBack,
+                      onPressed: _saving ? null : _handleBack,
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
@@ -176,11 +205,17 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: _handleFinish,
+                      onPressed: _saving ? null : _handleFinish,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: const Text('Finish'),
+                      child: _saving
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Finish'),
                     ),
                   ),
                 ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app_config.dart';
+import '../services/supabase_service.dart';
 import '../theme/spacing.dart';
 
 class FounderOnboardingScreen extends StatefulWidget {
@@ -18,6 +19,8 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
   final _videoController = TextEditingController();
   final _appStoreIdController = TextEditingController();
   final _playStoreIdController = TextEditingController();
+  final _supabaseService = SupabaseService();
+  bool _saving = false;
 
   String _selectedStage = 'Idea';
   final List<String> _stages = ['Idea', 'Pre-seed', 'Seed', 'Series A+'];
@@ -52,7 +55,46 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
     if (!(kBypassValidation || (_formKey.currentState?.validate() ?? false))) {
       return;
     }
-    Navigator.pushReplacementNamed(context, '/feed');
+    if (kBypassValidation) {
+      Navigator.pushReplacementNamed(context, '/feed');
+      return;
+    }
+    _saveFounder();
+  }
+
+  Future<void> _saveFounder() async {
+    setState(() => _saving = true);
+    try {
+      await _supabaseService.upsertFounderDetails(
+        startupName: _startupNameController.text.trim(),
+        pitch: _pitchController.text.trim(),
+        stage: _selectedStage,
+        lookingFor: _lookingFor.entries
+            .where((e) => e.value)
+            .map((e) => e.key)
+            .toList(),
+        website: _websiteController.text.trim().isEmpty
+            ? null
+            : _websiteController.text.trim(),
+        demoVideo: _videoController.text.trim().isEmpty
+            ? null
+            : _videoController.text.trim(),
+        appStoreId: _appStoreIdController.text.trim().isEmpty
+            ? null
+            : _appStoreIdController.text.trim(),
+        playStoreId: _playStoreIdController.text.trim().isEmpty
+            ? null
+            : _playStoreIdController.text.trim(),
+      );
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/feed');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save founder details: $e')),
+      );
+      setState(() => _saving = false);
+    }
   }
 
   @override
@@ -183,7 +225,7 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _handleBack,
+                      onPressed: _saving ? null : _handleBack,
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
@@ -193,11 +235,17 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: _handleFinish,
+                      onPressed: _saving ? null : _handleFinish,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: const Text('Finish'),
+                      child: _saving
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Finish'),
                     ),
                   ),
                 ],

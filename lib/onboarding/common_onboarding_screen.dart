@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../app_config.dart';
 import '../theme/spacing.dart';
+import '../services/supabase_service.dart';
 
 class CommonOnboardingScreen extends StatefulWidget {
   const CommonOnboardingScreen({Key? key}) : super(key: key);
@@ -16,6 +17,8 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
   final _nameController = TextEditingController();
   final _headlineController = TextEditingController();
   final _locationController = TextEditingController();
+  final _supabaseService = SupabaseService();
+  bool _saving = false;
 
   bool _availableForFreelancing = false;
   File? _profileImage;
@@ -89,6 +92,37 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
     }
     final role = ModalRoute.of(context)!.settings.arguments as String;
 
+    if (kBypassValidation) {
+      _goToRoleFlow(role);
+      return;
+    }
+
+    _saveProfile(role);
+  }
+
+  Future<void> _saveProfile(String role) async {
+    setState(() => _saving = true);
+    try {
+      await _supabaseService.upsertProfile(
+        fullName: _nameController.text.trim(),
+        headline: _headlineController.text.trim(),
+        location: _locationController.text.trim(),
+        role: role,
+        availableForFreelancing: _availableForFreelancing,
+        avatarFile: _profileImage,
+      );
+      if (!mounted) return;
+      _goToRoleFlow(role);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save profile: $e')),
+      );
+      setState(() => _saving = false);
+    }
+  }
+
+  void _goToRoleFlow(String role) {
     String nextRoute;
     switch (role) {
       case 'Founder':
@@ -238,7 +272,7 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _handleBack,
+                      onPressed: _saving ? null : _handleBack,
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
@@ -248,11 +282,17 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: _handleNext,
+                      onPressed: _saving ? null : _handleNext,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: const Text('Next'),
+                      child: _saving
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Next'),
                     ),
                   ),
                 ],

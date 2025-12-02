@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app_config.dart';
+import '../services/supabase_service.dart';
 import '../theme/spacing.dart';
 
 class InvestorOnboardingScreen extends StatefulWidget {
@@ -13,6 +14,8 @@ class InvestorOnboardingScreen extends StatefulWidget {
 class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _ticketSizeController = TextEditingController();
+  final _supabaseService = SupabaseService();
+  bool _saving = false;
 
   String _investorType = 'Angel';
   final List<String> _investorTypes = [
@@ -54,7 +57,33 @@ class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
         return;
       }
     }
-    Navigator.pushReplacementNamed(context, '/feed');
+    if (kBypassValidation) {
+      Navigator.pushReplacementNamed(context, '/feed');
+      return;
+    }
+    _saveInvestor();
+  }
+
+  Future<void> _saveInvestor() async {
+    setState(() => _saving = true);
+    try {
+      await _supabaseService.upsertInvestorDetails(
+        investorType: _investorType,
+        ticketSize: _ticketSizeController.text.trim(),
+        stages: _stagesInterested.entries
+            .where((e) => e.value)
+            .map((e) => e.key)
+            .toList(),
+      );
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/feed');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save investor details: $e')),
+      );
+      setState(() => _saving = false);
+    }
   }
 
   @override
@@ -154,7 +183,7 @@ class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _handleBack,
+                      onPressed: _saving ? null : _handleBack,
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
@@ -164,11 +193,17 @@ class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: _handleFinish,
+                      onPressed: _saving ? null : _handleFinish,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: const Text('Finish'),
+                      child: _saving
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Finish'),
                     ),
                   ),
                 ],
