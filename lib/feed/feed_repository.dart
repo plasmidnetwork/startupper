@@ -1,21 +1,99 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_models.dart';
 
 class FeedRepository {
-  // Simulate initial fetch with slight delay.
-  Future<List<FeedCardData>> fetchFeed() async {
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    return _mockFeed;
+  final _client = Supabase.instance.client;
+
+  Future<List<FeedCardData>> fetchFeed({int offset = 0, int limit = 10}) async {
+    try {
+      final rows = await _client
+          .from('feed_items')
+          .select(
+              'content, type, created_at, user:profiles(id, full_name, headline, role)')
+          .order('created_at', ascending: false)
+          .range(offset, offset + limit - 1);
+
+      return rows
+          .map<FeedCardData?>((row) => _mapRow(row))
+          .whereType<FeedCardData>()
+          .toList();
+    } catch (_) {
+      rethrow;
+    }
   }
 
-  // Simulate loading more items; cycles through the mock list.
-  Future<List<FeedCardData>> loadMore(int currentCount) async {
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    final start = currentCount % _mockFeed.length;
-    final next = _mockFeed.sublist(start) + _mockFeed.sublist(0, start);
-    // Return only a handful to mimic pagination.
-    return next.take(3).toList();
+  Future<List<FeedCardData>> loadMore(int currentCount) {
+    return fetchFeed(offset: currentCount, limit: 10);
+  }
+
+  FeedCardData? _mapRow(Map<String, dynamic> row) {
+    final content = (row['content'] as Map<String, dynamic>?);
+    if (content == null) return null;
+    final user = row['user'] as Map<String, dynamic>? ?? {};
+    final createdAt = row['created_at'] as String?;
+
+    final type = _typeFrom(row['type'] as String? ?? 'update');
+    final tags = (content['tags'] as List?)?.cast<String>() ?? const [];
+    final metricsJson = (content['metrics'] as List?) ?? [];
+    final metrics = metricsJson
+        .whereType<Map>()
+        .map((m) => MetricHighlight(
+              label: m['label']?.toString() ?? '',
+              value: m['value']?.toString() ?? '',
+            ))
+        .toList();
+
+    final authorName = user['full_name']?.toString();
+    final authorRole = user['role']?.toString() ?? '';
+    final authorAffiliation = user['headline']?.toString() ?? '';
+    final timeAgo = _formatTimeAgo(createdAt);
+
+    return FeedCardData(
+      type: type,
+      author: FeedAuthor(
+        name: authorName?.isNotEmpty == true ? authorName! : 'Member',
+        role: authorRole.isNotEmpty ? authorRole : 'Member',
+        affiliation: authorAffiliation,
+        timeAgo: timeAgo,
+      ),
+      title: content['title']?.toString() ?? 'Update',
+      subtitle: content['subtitle']?.toString() ?? '',
+      ask: content['ask']?.toString(),
+      metrics: metrics,
+      tags: tags,
+      reward: content['reward']?.toString(),
+      featured: (content['featured'] as bool?) ?? false,
+    );
+  }
+
+  FeedCardType _typeFrom(String type) {
+    switch (type) {
+      case 'highlight':
+        return FeedCardType.highlight;
+      case 'mission':
+        return FeedCardType.mission;
+      case 'investor':
+        return FeedCardType.investor;
+      case 'update':
+      default:
+        return FeedCardType.update;
+    }
+  }
+
+  String _formatTimeAgo(String? createdAt) {
+    if (createdAt == null) return '';
+    try {
+      final dt = DateTime.parse(createdAt).toLocal();
+      final diff = DateTime.now().difference(dt);
+      if (diff.inMinutes < 1) return 'now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+      if (diff.inHours < 24) return '${diff.inHours}h';
+      return '${diff.inDays}d';
+    } catch (_) {
+      return '';
+    }
   }
 }
 

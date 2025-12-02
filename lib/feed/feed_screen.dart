@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_models.dart';
 import 'feed_repository.dart';
+import 'dart:math';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({Key? key}) : super(key: key);
@@ -19,6 +21,7 @@ class _FeedScreenState extends State<FeedScreen> {
   bool _refreshing = false;
   bool _loadingMore = false;
   String? _error;
+  final bool _showSeedDialog = kDebugMode;
 
   @override
   void initState() {
@@ -115,6 +118,12 @@ class _FeedScreenState extends State<FeedScreen> {
         title: const Text('Feed'),
         automaticallyImplyLeading: false,
         actions: [
+          if (_showSeedDialog)
+            IconButton(
+              icon: const Icon(Icons.add_box_outlined),
+              tooltip: 'Add sample item',
+              onPressed: _openSeedDialog,
+            ),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Log out',
@@ -263,6 +272,39 @@ class _FeedScreenState extends State<FeedScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _openSeedDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => _SeedDialog(
+        onAdd: (item) async {
+          try {
+            await Supabase.instance.client.from('feed_items').insert({
+              'type': item.type.name,
+              'content': {
+                'title': item.title,
+                'subtitle': item.subtitle,
+                'ask': item.ask,
+                'tags': item.tags,
+                'reward': item.reward,
+                'featured': item.featured,
+                'metrics': item.metrics
+                    .map((m) => {'label': m.label, 'value': m.value})
+                    .toList(),
+              },
+              'user_id': Supabase.instance.client.auth.currentUser?.id,
+            });
+            await _refresh();
+          } catch (e) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Could not add item: $e')),
+            );
+          }
+        },
       ),
     );
   }
@@ -874,6 +916,111 @@ class _FiltersRow extends StatelessWidget {
             ),
           )
           .toList(),
+    );
+  }
+}
+
+class _SeedDialog extends StatefulWidget {
+  const _SeedDialog({required this.onAdd});
+
+  final Future<void> Function(FeedCardData) onAdd;
+
+  @override
+  State<_SeedDialog> createState() => _SeedDialogState();
+}
+
+class _SeedDialogState extends State<_SeedDialog> {
+  FeedCardType _type = FeedCardType.update;
+  final _titleCtrl = TextEditingController(text: 'Sample update');
+  final _subtitleCtrl =
+      TextEditingController(text: 'This is a sample item from the app.');
+  final _askCtrl = TextEditingController(text: 'Looking for early feedback');
+  bool _featured = false;
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _subtitleCtrl.dispose();
+    _askCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add sample feed item'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButton<FeedCardType>(
+              value: _type,
+              onChanged: (val) {
+                if (val != null) setState(() => _type = val);
+              },
+              items: FeedCardType.values
+                  .map((t) => DropdownMenuItem(
+                        value: t,
+                        child: Text(t.name),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _titleCtrl,
+              decoration: const InputDecoration(labelText: 'Title'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _subtitleCtrl,
+              decoration: const InputDecoration(labelText: 'Subtitle'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _askCtrl,
+              decoration: const InputDecoration(labelText: 'Ask'),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              value: _featured,
+              onChanged: (val) => setState(() => _featured = val),
+              title: const Text('Featured'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            final randomMetric = MetricHighlight(
+              label: 'Signal',
+              value: '${Random().nextInt(100)}%',
+            );
+            final item = FeedCardData(
+              type: _type,
+              author: const FeedAuthor(
+                name: 'You',
+                role: 'Member',
+                affiliation: '',
+                timeAgo: 'now',
+              ),
+              title: _titleCtrl.text,
+              subtitle: _subtitleCtrl.text,
+              ask: _askCtrl.text.isEmpty ? null : _askCtrl.text,
+              metrics: [randomMetric],
+              tags: const ['App-seeded'],
+              featured: _featured,
+            );
+            await widget.onAdd(item);
+            if (mounted) Navigator.pop(context);
+          },
+          child: const Text('Add'),
+        ),
+      ],
     );
   }
 }

@@ -124,7 +124,8 @@ startupper/
      - Investor spotlights (thesis, tags, intro/share CTAs)
    - Filter chips row and role-accented styling
    - Pull-to-refresh and auto load-more near scroll end
-   - Mocked data powering the feed via `feed_repository.dart` (no backend yet)
+   - Feed repository now fetches from Supabase `feed_items` (no mock fallback)
+   - Debug-only “Add sample item” action in feed AppBar to seed `feed_items`
 
 ### ✨ Key Features
 
@@ -145,7 +146,7 @@ startupper/
 - ✅ Color-based selection indicators
 - ✅ Smooth expand/collapse animations
 - ✅ Feed layouts with featured horizontal strip and responsive card actions
- - ✅ Logout button on feed (Supabase sign out)
+- ✅ Logout button on feed (Supabase sign out)
 
 **Form Features:**
 - ✅ Profile picture upload with image picker
@@ -212,16 +213,16 @@ CommonOnboardingScreen
 FeedScreen
 ```
 
-**State Management:**
+**State & Data:**
 - Local state with StatefulWidget and setState()
 - TextEditingController for form inputs
 - Route arguments for passing selected role
 - File storage for profile images
-- Mocked feed data served by `lib/feed/feed_repository.dart`
-- Supabase persistence for profiles + role details via `services/supabase_service.dart`
+- Supabase persistence via `services/supabase_service.dart`
   - Auth screen ensures a `profiles` row on signup/login
   - Common onboarding: upserts profile and avatar to `avatars` bucket
   - Role onboarding: upserts to `founder_details`, `investor_details`, or `enduser_details`
+- Feed data fetched from Supabase `feed_items` (fallback to mock if empty/error) via `feed_repository.dart`
 
 ## Next Steps
 
@@ -233,7 +234,7 @@ FeedScreen
 - [ ] Save user profiles to Supabase database (profile upsert done; ensure flow skips onboarding when role exists)
 - [x] Move feed data to a service layer and wire to backend when ready
 - [ ] Add empty/skeleton states for feed loading/empty
-- [ ] Wire feed to Supabase (replace mock repo with `feed_items` reads)
+- [ ] Wire feed inserts/search/filter to Supabase (fetch now uses `feed_items`; inserts seeded via debug action)
 - [ ] Session-aware routing to skip onboarding when profile/role exists
 
 ### Feature Development
