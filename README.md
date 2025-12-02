@@ -250,7 +250,7 @@ FeedScreen
 - [x] Save user profiles to Supabase database (profile upsert + avatar upload working)
 - [x] Move feed data to a service layer and wire to backend when ready
 - [ ] Add empty/skeleton states for feed loading/empty
-- [ ] Wire feed inserts/search/filter to Supabase (fetch now uses `feed_items`; inserts seeded via debug action)
+- [ ] Wire feed inserts/search/filter to Supabase (reads now come from `feed_items`; debug-only seeding exists)
 - [ ] Session-aware routing to skip onboarding when profile/role exists
 
 ### Feature Development
