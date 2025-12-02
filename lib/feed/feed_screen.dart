@@ -391,6 +391,7 @@ class _HighlightCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
+            width: double.infinity,
             constraints: const BoxConstraints(minHeight: 96),
             decoration: BoxDecoration(
               gradient: LinearGradient(
