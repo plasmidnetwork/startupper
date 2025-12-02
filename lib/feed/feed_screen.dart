@@ -223,25 +223,26 @@ class _FeedScreenState extends State<FeedScreen> {
                   ),
                 )
               else ...[
-                if (featured.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: SizedBox(
-                        height: 250,
-                        child: ListView.separated(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          scrollDirection: Axis.horizontal,
-                          itemBuilder: (context, index) => _FeaturedCard(
-                            data: featured[index],
-                          ),
-                          separatorBuilder: (context, index) =>
-                              const SizedBox(width: 12),
-                          itemCount: featured.length,
-                        ),
-                      ),
-                    ),
-                  ),
+                // Featured section commented out for now
+                // if (featured.isNotEmpty)
+                //   SliverToBoxAdapter(
+                //     child: Padding(
+                //       padding: const EdgeInsets.only(bottom: 8),
+                //       child: SizedBox(
+                //         height: 250,
+                //         child: ListView.separated(
+                //           padding: const EdgeInsets.symmetric(horizontal: 16),
+                //           scrollDirection: Axis.horizontal,
+                //           itemBuilder: (context, index) => _FeaturedCard(
+                //             data: featured[index],
+                //           ),
+                //           separatorBuilder: (context, index) =>
+                //               const SizedBox(width: 12),
+                //           itemCount: featured.length,
+                //         ),
+                //       ),
+                //     ),
+                //   ),
                 SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
