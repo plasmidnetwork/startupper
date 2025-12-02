@@ -51,7 +51,9 @@ class SupabaseService {
 
   Future<String> _uploadAvatar(String userId, File file) async {
     final ext = _fileExtension(file.path);
-    final path = 'avatars/$userId.$ext';
+    // Path is relative to the bucket, so no need for 'avatars/' prefix
+    // since the bucket is already named 'avatars'
+    final path = '$userId.$ext';
     await _client.storage.from('avatars').upload(
           path,
           file,

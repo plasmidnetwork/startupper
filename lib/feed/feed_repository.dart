@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_models.dart';
@@ -11,9 +12,13 @@ class FeedRepository {
       final rows = await _client
           .from('feed_items')
           .select(
-              'content, type, created_at, user:profiles(id, full_name, headline, role)')
+              // Include avatar_url so we can display user profile images
+              'content, type, created_at, user:profiles(id, full_name, headline, role, avatar_url)')
           .order('created_at', ascending: false)
           .range(offset, offset + limit - 1);
+
+      developer.log('FeedRepository.fetchFeed: fetched ${rows.length} rows',
+          name: 'feed');
 
       return rows
           .map<FeedCardData?>((row) => _mapRow(row))
@@ -50,6 +55,12 @@ class FeedRepository {
     final authorAffiliation = user['headline']?.toString() ?? '';
     final avatarUrl = user['avatar_url']?.toString();
     final timeAgo = _formatTimeAgo(createdAt);
+
+    // Debug logging for avatar troubleshooting
+    developer.log(
+      'FeedRepository._mapRow: author=$authorName, avatarUrl=$avatarUrl',
+      name: 'feed',
+    );
 
     return FeedCardData(
       type: type,
@@ -132,7 +143,8 @@ const _mockFeed = <FeedCardData>[
     ask: 'Looking for intros to PLG advisors',
     metrics: [
       MetricHighlight(label: 'Activation', value: '+7%'),
-      MetricHighlight(label: 'Engagement', value: '5.2 min', color: Colors.redAccent),
+      MetricHighlight(
+          label: 'Engagement', value: '5.2 min', color: Colors.redAccent),
     ],
   ),
   FeedCardData(
@@ -206,7 +218,8 @@ const _mockFeed = <FeedCardData>[
       timeAgo: '2d',
     ),
     title: 'User interviews (fintech operators)',
-    subtitle: 'Need 3 quick calls to vet a workflow idea. I\'ll compensate for time.',
+    subtitle:
+        'Need 3 quick calls to vet a workflow idea. I\'ll compensate for time.',
     tags: ['Research', '30 min', 'Remote'],
     reward: '\$75',
     ask: 'Fintech ops / PMs preferred',
@@ -220,7 +233,8 @@ const _mockFeed = <FeedCardData>[
       timeAgo: '3d',
     ),
     title: 'Parallel Capital — SaaS infra & AI tooling',
-    subtitle: 'Writing \$250k–\$600k checks; focused on workflow AI with clear unit economics.',
+    subtitle:
+        'Writing \$250k–\$600k checks; focused on workflow AI with clear unit economics.',
     tags: ['Seed', 'Infra', 'AI tooling'],
     ask: 'Booking office hours next week',
   ),
@@ -233,7 +247,8 @@ const _mockFeed = <FeedCardData>[
       timeAgo: '3d',
     ),
     title: 'Beta shipped to 40 teams',
-    subtitle: 'Hit 40 design partner teams; NPS 62. Starting to price next month.',
+    subtitle:
+        'Hit 40 design partner teams; NPS 62. Starting to price next month.',
     ask: 'Looking for pricing advisor',
     metrics: [
       MetricHighlight(label: 'DAU', value: '1.4k'),

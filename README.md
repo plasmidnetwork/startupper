@@ -30,7 +30,7 @@ startupper/
 │   └── feed/
 │       ├── feed_screen.dart    # Feed UI, cards, refresh/load-more
 │       ├── feed_models.dart    # Feed models and enums
-│       └── feed_repository.dart # Mocked data/service layer
+│       └── feed_repository.dart # Supabase data layer with debug logging
 ├── ios/                   # iOS platform files
 ├── macos/                 # macOS platform files
 ├── pubspec.yaml           # Project dependencies and configuration
@@ -186,17 +186,33 @@ dependencies:
 
 - See `supabase/schema.sql` for tables, indexes, and RLS policies (profiles, role details, feed_items).
 - Create a project in Supabase, copy `SUPABASE_URL` and `SUPABASE_ANON_KEY`, apply `supabase/schema.sql` via SQL editor or `supabase db push`, then run the app with the dart-defines above.
- - Create a Storage bucket `avatars` and apply the storage policies in `schema.sql` (authenticated upload/read).
 
 ### Supabase Setup Checklist
-- Apply `supabase/schema.sql` (tables, indexes, RLS, storage policies).
-- Reset API cache (Settings → API → Reset cache) after creating tables/policies.
-- Create Storage bucket `avatars`; allow authenticated upload/read (or signed URLs).
-- Set Auth redirect URL: use a deep link (e.g., `startupper://auth-callback`) or HTTPS you control. Add it to Site URL and Allowed Redirect URLs.
-- Run the app with dart-defines:
-  - `SUPABASE_URL`, `SUPABASE_ANON_KEY`
-  - Optional: `SUPABASE_EMAIL_REDIRECT` for verification links (deep link/HTTPS)
-  - Optional: `BYPASS_VALIDATION=true` for testing
+
+1. **Apply database schema:**
+   - Run `supabase/schema.sql` in SQL Editor (tables, indexes, RLS policies, storage policies)
+   - Reset API cache (Settings → API → Reset cache) after creating tables/policies
+
+2. **Create Storage bucket for avatars:**
+   - Go to Storage → New bucket → Name: `avatars`
+   - **⚠️ IMPORTANT: Enable "Public bucket"** toggle (required for public URL access)
+   - The storage policies in `schema.sql` handle authenticated upload/update/delete
+   - Avatar files are stored at `{user_id}.{ext}` (e.g., `abc123-def456.png`)
+
+3. **Configure Auth redirect URL:**
+   - Use a deep link (e.g., `startupper://auth-callback`) or HTTPS URL you control
+   - Add it to Authentication → URL Configuration → Site URL and Redirect URLs
+
+4. **Run the app with dart-defines:**
+   ```bash
+   flutter run \
+     --dart-define=SUPABASE_URL=<your-project-url> \
+     --dart-define=SUPABASE_ANON_KEY=<your-anon-key> \
+     -d <device>
+   ```
+   Optional:
+   - `--dart-define=SUPABASE_EMAIL_REDIRECT=<redirect-url>` for email verification
+   - `--dart-define=BYPASS_VALIDATION=true` for testing
 
 ## Architecture
 
@@ -217,12 +233,11 @@ FeedScreen
 - Local state with StatefulWidget and setState()
 - TextEditingController for form inputs
 - Route arguments for passing selected role
-- File storage for profile images
 - Supabase persistence via `services/supabase_service.dart`
   - Auth screen ensures a `profiles` row on signup/login
-  - Common onboarding: upserts profile and avatar to `avatars` bucket
+  - Common onboarding: upserts profile and uploads avatar to `avatars` bucket (public URL stored in `profiles.avatar_url`)
   - Role onboarding: upserts to `founder_details`, `investor_details`, or `enduser_details`
-- Feed data fetched from Supabase `feed_items` (fallback to mock if empty/error) via `feed_repository.dart`
+- Feed data fetched from Supabase `feed_items` via `feed_repository.dart` (includes author avatar URLs from joined `profiles` table)
 
 ## Next Steps
 
@@ -230,8 +245,8 @@ FeedScreen
 - [x] Add form validation (required fields, email format)
 - [ ] Add loading states and error handling
 - [ ] Integrate Supabase authentication (sessions, redirects) end-to-end
-- [ ] Set up Supabase Storage for profile pictures (bucket `avatars`, policies in schema.sql)
-- [ ] Save user profiles to Supabase database (profile upsert done; ensure flow skips onboarding when role exists)
+- [x] Set up Supabase Storage for profile pictures (bucket `avatars`, public URLs working)
+- [x] Save user profiles to Supabase database (profile upsert + avatar upload working)
 - [x] Move feed data to a service layer and wire to backend when ready
 - [ ] Add empty/skeleton states for feed loading/empty
 - [ ] Wire feed inserts/search/filter to Supabase (fetch now uses `feed_items`; inserts seeded via debug action)
@@ -264,8 +279,9 @@ FeedScreen
 - Auth/onboarding code is split into feature files under `lib/auth` and `lib/onboarding`; app shell routes live in `main.dart`
 - No external state management (Provider, Riverpod, etc.) yet
 - Inline form validation implemented; can be bypassed for testing with `--dart-define=BYPASS_VALIDATION=true`
-- No backend integration yet (Supabase ready)
-- Profile images stored locally only
+- Supabase integration working for auth, profiles, role details, feed items, and avatar storage
+- Profile images uploaded to Supabase Storage (`avatars` bucket) with public URLs
+- Feed repository includes debug logging (`dart:developer`) for troubleshooting
 
 ## Learn More
 
