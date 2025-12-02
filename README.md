@@ -64,9 +64,10 @@ startupper/
    # On macOS
    flutter run --dart-define=SUPABASE_URL=<url> --dart-define=SUPABASE_ANON_KEY=<anon-key> -d macos
    ```
-   Optional test bypass for validation:
+   Optional extras:
    ```bash
-   --dart-define=BYPASS_VALIDATION=true
+   --dart-define=SUPABASE_EMAIL_REDIRECT=<redirect-url>  # deep link or HTTPS for email verification
+   --dart-define=BYPASS_VALIDATION=true                  # testing bypass
    ```
 
 ## Current Implementation
@@ -144,6 +145,7 @@ startupper/
 - ✅ Color-based selection indicators
 - ✅ Smooth expand/collapse animations
 - ✅ Feed layouts with featured horizontal strip and responsive card actions
+ - ✅ Logout button on feed (Supabase sign out)
 
 **Form Features:**
 - ✅ Profile picture upload with image picker
@@ -155,6 +157,10 @@ startupper/
 - ✅ Proper keyboard types (URL, email, number)
 - ✅ Required field indicators (*)
 - ✅ Inline validation on auth/onboarding forms; navigation gated on validity
+- ✅ Supabase auth wired (sign up/login)
+- ✅ Profile + role detail upserts to Supabase; optional avatar upload to Storage
+  - Common onboarding writes to `profiles` (+ avatar to `avatars` bucket if provided)
+  - Founder/Investor/End-user onboarding writes to respective tables
 
 **Code Quality:**
 - ✅ Null-safe Dart
@@ -172,12 +178,24 @@ dependencies:
   flutter: sdk
   cupertino_icons: ^1.0.2
   image_picker: ^1.0.4      # Profile picture uploads
+  supabase_flutter: ^2.5.5  # Supabase auth, database, storage
 ```
 
 ## Backend Schema (Supabase)
 
 - See `supabase/schema.sql` for tables, indexes, and RLS policies (profiles, role details, feed_items).
 - Create a project in Supabase, copy `SUPABASE_URL` and `SUPABASE_ANON_KEY`, apply `supabase/schema.sql` via SQL editor or `supabase db push`, then run the app with the dart-defines above.
+ - Create a Storage bucket `avatars` and apply the storage policies in `schema.sql` (authenticated upload/read).
+
+### Supabase Setup Checklist
+- Apply `supabase/schema.sql` (tables, indexes, RLS, storage policies).
+- Reset API cache (Settings → API → Reset cache) after creating tables/policies.
+- Create Storage bucket `avatars`; allow authenticated upload/read (or signed URLs).
+- Set Auth redirect URL: use a deep link (e.g., `startupper://auth-callback`) or HTTPS you control. Add it to Site URL and Allowed Redirect URLs.
+- Run the app with dart-defines:
+  - `SUPABASE_URL`, `SUPABASE_ANON_KEY`
+  - Optional: `SUPABASE_EMAIL_REDIRECT` for verification links (deep link/HTTPS)
+  - Optional: `BYPASS_VALIDATION=true` for testing
 
 ## Architecture
 
@@ -200,17 +218,23 @@ FeedScreen
 - Route arguments for passing selected role
 - File storage for profile images
 - Mocked feed data served by `lib/feed/feed_repository.dart`
+- Supabase persistence for profiles + role details via `services/supabase_service.dart`
+  - Auth screen ensures a `profiles` row on signup/login
+  - Common onboarding: upserts profile and avatar to `avatars` bucket
+  - Role onboarding: upserts to `founder_details`, `investor_details`, or `enduser_details`
 
 ## Next Steps
 
 ### Immediate Priorities
 - [x] Add form validation (required fields, email format)
 - [ ] Add loading states and error handling
-- [ ] Integrate Supabase authentication (sign up, login, sessions)
-- [ ] Set up Supabase Storage for profile pictures
-- [ ] Save user profiles to Supabase database
+- [ ] Integrate Supabase authentication (sessions, redirects) end-to-end
+- [ ] Set up Supabase Storage for profile pictures (bucket `avatars`, policies in schema.sql)
+- [ ] Save user profiles to Supabase database (profile upsert done; ensure flow skips onboarding when role exists)
 - [x] Move feed data to a service layer and wire to backend when ready
 - [ ] Add empty/skeleton states for feed loading/empty
+- [ ] Wire feed to Supabase (replace mock repo with `feed_items` reads)
+- [ ] Session-aware routing to skip onboarding when profile/role exists
 
 ### Feature Development
 - [ ] Build out the feed screen with real content (Supabase or API)
