@@ -13,6 +13,8 @@ import 'services/supabase_service.dart';
 import 'theme/app_theme.dart';
 import 'profile/profile_screen.dart';
 import 'feed/contact_requests_screen.dart';
+import 'feed/feed_item_screen.dart';
+import 'feed/feed_models.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -146,8 +148,7 @@ class _StartupperAppState extends State<StartupperApp> {
       );
     }
 
-    final initialRoute =
-        _session != null ? '/feed' : '/auth';
+    final initialRoute = _session != null ? '/feed' : '/auth';
 
     return MaterialApp(
       title: 'Startupper',
@@ -164,6 +165,24 @@ class _StartupperAppState extends State<StartupperApp> {
         '/feed': (context) => const FeedScreen(),
         '/profile': (context) => const ProfileScreen(),
         '/intros': (context) => const ContactRequestsScreen(),
+        '/feed/item': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          String? id;
+          FeedCardData? data;
+          if (args is Map) {
+            id = args['id']?.toString();
+            final raw = args['data'];
+            if (raw is FeedCardData) {
+              data = raw;
+            }
+          }
+          if (id == null) {
+            return const Scaffold(
+              body: Center(child: Text('Missing feed item id')),
+            );
+          }
+          return FeedItemScreen(id: id, initial: data);
+        },
       },
     );
   }

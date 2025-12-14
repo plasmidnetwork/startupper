@@ -317,6 +317,12 @@ FeedScreen
 - Feed discovery: search bar + tag/type filters with role-aware “Personalized” tag, all executed server-side; filters/search persisted with reset action and role defaults.
 - Investor intros: request-intro action on investor cards posts to Supabase `contact_requests` (with RLS), including optional message and feed-item context.
 - Intro inbox: two-tab view for incoming/sent contact requests with accept/decline actions and status updates (requires the contact_requests update policy migration).
+- Investor cards disable repeat requests after sending (“Intro sent” state).
+- Inbox polish: tap “Via feed” to preview the related feed item; accept/decline shows undo.
+- Feed item deep link: “Via feed” now navigates to a dedicated feed-item screen route that renders the full card.
+- Duplicate intro guard: investor cards are disabled when you’ve already sent (or have a pending/accepted) intro to that member.
+- Author profile sheet: tap an author in the feed to open a bottom sheet with their info and request-intro action (respects duplicate-intro guard).
+- Inbox authors open a profile sheet (with intro action); “Via feed” still links to the feed item for context.
 
 ## Platform Support
 

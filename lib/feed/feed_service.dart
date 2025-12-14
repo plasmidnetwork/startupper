@@ -74,6 +74,7 @@ class FeedService {
     final List<dynamic> rows = await _client
         .from('contact_requests')
         .select('id, status, message, feed_item_id, created_at, '
+            'feed_item:feed_items(id, content), '
             'requester:profiles!contact_requests_requester_fkey(id, full_name, role, headline, avatar_url), '
             'target:profiles!contact_requests_target_fkey(id, full_name, role, headline, avatar_url)')
         .eq(filterColumn, userId)
@@ -106,6 +107,13 @@ class FeedService {
     final targetJson = row['target'] as Map?;
     if (requesterJson == null || targetJson == null) return null;
 
+    final feedItemJson = row['feed_item'] as Map?;
+    String? feedItemTitle;
+    if (feedItemJson != null) {
+      final content = feedItemJson['content'] as Map?;
+      feedItemTitle = content?['title']?.toString();
+    }
+
     final requester = ContactRequestParty(
       id: requesterJson['id']?.toString() ?? '',
       name: requesterJson['full_name']?.toString() ?? 'Member',
@@ -136,6 +144,7 @@ class FeedService {
       createdAt: createdAt,
       message: row['message']?.toString(),
       feedItemId: row['feed_item_id']?.toString(),
+      feedItemTitle: feedItemTitle,
     );
   }
 }

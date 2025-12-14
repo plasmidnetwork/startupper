@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/snackbar.dart';
 import 'contact_request_models.dart';
 import 'feed_service.dart';
+import 'feed_repository.dart';
+import 'feed_models.dart';
 
 class ContactRequestsScreen extends StatefulWidget {
   const ContactRequestsScreen({super.key});
@@ -14,6 +16,7 @@ class ContactRequestsScreen extends StatefulWidget {
 class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
   final _service = FeedService();
   final Map<String, bool> _updating = {};
+  final Set<String> _introDisabled = {};
   List<ContactRequest> _incoming = [];
   List<ContactRequest> _outgoing = [];
   bool _loadingIncoming = true;
@@ -44,6 +47,11 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
       setState(() {
         _incoming = data;
         _loadingIncoming = false;
+        _introDisabled.addAll(
+          data
+              .where((r) => r.status != ContactRequestStatus.declined)
+              .map((r) => r.requester.id == _userId ? r.target.id : r.requester.id),
+        );
       });
     } catch (_) {
       if (!mounted) return;
@@ -65,6 +73,11 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
       setState(() {
         _outgoing = data;
         _loadingOutgoing = false;
+        _introDisabled.addAll(
+          data
+              .where((r) => r.status != ContactRequestStatus.declined)
+              .map((r) => r.target.id),
+        );
       });
     } catch (_) {
       if (!mounted) return;
@@ -80,15 +93,39 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
     ContactRequestStatus status,
   ) async {
     if (_updating[request.id] == true) return;
+    if (!mounted) return;
     setState(() {
       _updating[request.id] = true;
     });
+    final previousStatus = request.status;
     try {
       await _service.updateContactRequestStatus(id: request.id, status: status);
       await _loadIncoming();
       await _loadOutgoing();
       if (!mounted) return;
-      showSuccessSnackBar(context, 'Status updated');
+      final messenger = ScaffoldMessenger.of(context);
+      final snack = SnackBar(
+        content: Text('Status updated to ${status.name}'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            try {
+              await _service.updateContactRequestStatus(
+                  id: request.id, status: previousStatus);
+              await _loadIncoming();
+              await _loadOutgoing();
+              if (mounted) {
+                showSuccessSnackBar(context, 'Reverted to ${previousStatus.name}');
+              }
+            } catch (_) {
+              if (mounted) {
+                showErrorSnackBar(context, 'Could not undo update.');
+              }
+            }
+          },
+        ),
+      );
+      messenger.showSnackBar(snack);
     } catch (_) {
       if (!mounted) return;
       showErrorSnackBar(context, 'Could not update request.');
@@ -149,6 +186,8 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
               onDecline: (req) => _updateStatus(req, ContactRequestStatus.declined),
               updating: _updating,
               isIncomingTab: true,
+              onOpenFeedItem: _openFeedItem,
+              onAuthorTap: _openAuthorSheet,
             ),
             _RequestList(
               requests: _outgoing,
@@ -160,10 +199,175 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
               onDecline: null,
               updating: _updating,
               isIncomingTab: false,
+              onOpenFeedItem: _openFeedItem,
+              onAuthorTap: _openAuthorSheet,
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _openFeedItem(String feedItemId, [FeedCardData? initial]) async {
+    if (!mounted) return;
+    Navigator.pushNamed(
+      context,
+      '/feed/item',
+      arguments: {'id': feedItemId, 'data': initial},
+    );
+  }
+
+  Future<void> _openAuthorSheet(ContactRequestParty party) async {
+    if (!mounted) return;
+    bool requesting = false;
+    await showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final disabled = _introDisabled.contains(party.id);
+            Future<void> sendIntro() async {
+              if (requesting || party.id.isEmpty || disabled) return;
+              final controller = TextEditingController();
+              final msg = await showDialog<String?>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: Text('Request intro to ${party.name}'),
+                  content: TextField(
+                    controller: controller,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Message (optional)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context, controller.text);
+                      },
+                      child: const Text('Send'),
+                    ),
+                  ],
+                ),
+              );
+              if (msg == null) return;
+              setSheetState(() => requesting = true);
+              try {
+                await _service.requestIntro(
+                  targetUserId: party.id,
+                  message: msg.trim().isEmpty ? null : msg.trim(),
+                );
+                if (!mounted) return;
+                setState(() {
+                  _introDisabled.add(party.id);
+                });
+                Navigator.pop(context);
+                showSuccessSnackBar(context, 'Intro request sent');
+              } catch (_) {
+                if (mounted) {
+                  showErrorSnackBar(context, 'Could not send intro right now.');
+                }
+              } finally {
+                setSheetState(() => requesting = false);
+              }
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundImage: (party.avatarUrl != null &&
+                                party.avatarUrl!.isNotEmpty)
+                            ? NetworkImage(party.avatarUrl!)
+                            : null,
+                        child: (party.avatarUrl == null || party.avatarUrl!.isEmpty)
+                            ? Text(
+                                party.name.isNotEmpty
+                                    ? party.name[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              party.name,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            Text(
+                              '${party.role}${party.headline.isNotEmpty ? ' · ${party.headline}' : ''}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Tooltip(
+                          message: disabled
+                              ? 'You already sent an intro to this member'
+                              : '',
+                          child: ElevatedButton(
+                            onPressed: (party.id.isEmpty || disabled || requesting)
+                                ? null
+                                : sendIntro,
+                            child: requesting
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : Text(disabled ? 'Intro sent' : 'Request intro'),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -177,6 +381,8 @@ class _RequestList extends StatelessWidget {
     required this.currentUserId,
     required this.updating,
     required this.isIncomingTab,
+    required this.onOpenFeedItem,
+    required this.onAuthorTap,
     this.onAccept,
     this.onDecline,
   });
@@ -188,6 +394,9 @@ class _RequestList extends StatelessWidget {
   final String currentUserId;
   final Map<String, bool> updating;
   final bool isIncomingTab;
+  final Future<void> Function(String feedItemId, [FeedCardData? initial])
+      onOpenFeedItem;
+  final void Function(ContactRequestParty) onAuthorTap;
   final void Function(ContactRequest)? onAccept;
   final void Function(ContactRequest)? onDecline;
 
@@ -251,6 +460,13 @@ class _RequestList extends StatelessWidget {
             isUpdating: isUpdating,
             onAccept: canAct && onAccept != null ? () => onAccept!(req) : null,
             onDecline: canAct && onDecline != null ? () => onDecline!(req) : null,
+            onOpenFeed: req.feedItemId == null
+                ? null
+                : () => onOpenFeedItem(req.feedItemId!, null),
+            onAuthorTap: () {
+              final party = isIncoming ? req.requester : req.target;
+              onAuthorTap(party);
+            },
           );
         },
       ),
@@ -267,6 +483,8 @@ class _RequestCard extends StatelessWidget {
     required this.isUpdating,
     this.onAccept,
     this.onDecline,
+    this.onOpenFeed,
+    this.onAuthorTap,
   });
 
   final ContactRequest request;
@@ -276,6 +494,8 @@ class _RequestCard extends StatelessWidget {
   final bool isUpdating;
   final VoidCallback? onAccept;
   final VoidCallback? onDecline;
+  final VoidCallback? onOpenFeed;
+  final VoidCallback? onAuthorTap;
 
   @override
   Widget build(BuildContext context) {
@@ -293,59 +513,62 @@ class _RequestCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  backgroundColor: accent.withValues(alpha: 0.16),
-                  backgroundImage: (other.avatarUrl != null && other.avatarUrl!.isNotEmpty)
-                      ? NetworkImage(other.avatarUrl!)
-                      : null,
-                  child: (other.avatarUrl == null || other.avatarUrl!.isEmpty)
-                      ? Text(
-                          initial,
-                          style: TextStyle(
-                            color: accent,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        other.name,
-                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        '${other.role}${other.headline.isNotEmpty ? ' · ${other.headline}' : ''}',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: theme.colorScheme.outline),
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          Chip(
-                            label: Text(statusLabel),
-                            visualDensity: VisualDensity.compact,
-                            backgroundColor: statusColor.withValues(alpha: 0.14),
-                            labelStyle: theme.textTheme.labelMedium
-                                ?.copyWith(color: statusColor, fontWeight: FontWeight.w700),
-                          ),
-                          Text(
-                            isIncoming ? 'Incoming' : 'Sent',
-                            style: theme.textTheme.labelMedium,
-                          ),
-                        ],
-                      ),
-                    ],
+            InkWell(
+              onTap: onAuthorTap,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    backgroundColor: accent.withValues(alpha: 0.16),
+                    backgroundImage: (other.avatarUrl != null && other.avatarUrl!.isNotEmpty)
+                        ? NetworkImage(other.avatarUrl!)
+                        : null,
+                    child: (other.avatarUrl == null || other.avatarUrl!.isEmpty)
+                        ? Text(
+                            initial,
+                            style: TextStyle(
+                              color: accent,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : null,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          other.name,
+                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          '${other.role}${other.headline.isNotEmpty ? ' · ${other.headline}' : ''}',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: theme.colorScheme.outline),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            Chip(
+                              label: Text(statusLabel),
+                              visualDensity: VisualDensity.compact,
+                              backgroundColor: statusColor.withValues(alpha: 0.14),
+                              labelStyle: theme.textTheme.labelMedium
+                                  ?.copyWith(color: statusColor, fontWeight: FontWeight.w700),
+                            ),
+                            Text(
+                              isIncoming ? 'Incoming' : 'Sent',
+                              style: theme.textTheme.labelMedium,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 12),
             if (request.message != null && request.message!.isNotEmpty) ...[
@@ -366,9 +589,22 @@ class _RequestCard extends StatelessWidget {
                 ),
                 const Spacer(),
                 if (request.feedItemId != null)
-                  Text(
-                    'Via feed',
-                    style: theme.textTheme.labelMedium,
+                  InkWell(
+                    onTap: onOpenFeed,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.link, size: 16),
+                        const SizedBox(width: 4),
+                        Text(
+                          request.feedItemTitle?.isNotEmpty == true
+                              ? request.feedItemTitle!
+                              : 'Via feed',
+                          style: theme.textTheme.labelMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
               ],
             ),

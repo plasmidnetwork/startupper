@@ -37,6 +37,7 @@ class ContactRequest {
     required this.createdAt,
     this.message,
     this.feedItemId,
+    this.feedItemTitle,
   });
 
   final String id;
@@ -46,6 +47,7 @@ class ContactRequest {
   final DateTime createdAt;
   final String? message;
   final String? feedItemId;
+  final String? feedItemTitle;
 
   bool get isPending => status == ContactRequestStatus.pending;
 }

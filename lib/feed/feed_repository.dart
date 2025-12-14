@@ -155,6 +155,23 @@ class FeedRepository {
       return '';
     }
   }
+
+  Future<FeedCardData?> fetchById(String id) async {
+    try {
+      final rows = await _client
+          .from('feed_items')
+          .select(
+              'id, content, type, created_at, user:profiles(id, full_name, headline, role, avatar_url)')
+          .eq('id', id)
+          .limit(1);
+      if (rows is List && rows.isNotEmpty) {
+        return _mapRow(rows.first as Map<String, dynamic>);
+      }
+      return null;
+    } catch (_) {
+      rethrow;
+    }
+  }
 }
 
 // ignore: unused_element

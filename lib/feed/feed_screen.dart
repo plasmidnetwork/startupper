@@ -8,6 +8,7 @@ import 'feed_service.dart';
 import '../theme/snackbar.dart';
 import '../theme/loading_overlay.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'contact_request_models.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({Key? key}) : super(key: key);
@@ -24,6 +25,7 @@ class _FeedScreenState extends State<FeedScreen> {
   final TextEditingController _searchController = TextEditingController();
   SharedPreferences? _prefs;
   List<FeedCardData> _items = [];
+  final Set<String> _pendingIntroTargets = {};
   bool _loading = true;
   bool _refreshing = false;
   bool _loadingMore = false;
@@ -52,9 +54,175 @@ class _FeedScreenState extends State<FeedScreen> {
   Future<void> _initFeed() async {
     await _loadPrefs();
     if (!mounted) return;
+    await _loadPendingIntroTargets();
+    if (!mounted) return;
     await _loadUserRole();
     if (!mounted) return;
     await _loadInitial();
+  }
+
+  Future<void> _loadPendingIntroTargets() async {
+    try {
+      final sent = await _feedService.fetchContactRequests(outgoing: true);
+      if (!mounted) return;
+      final targets = sent
+          .where((r) => r.status != ContactRequestStatus.declined)
+          .map((r) => r.target.id)
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      setState(() {
+        _pendingIntroTargets
+          ..clear()
+          ..addAll(targets);
+      });
+    } catch (_) {
+      // ignore failures; intro disabling will be best-effort.
+    }
+  }
+
+  Future<void> _openAuthorProfile(FeedAuthor author) async {
+    final isIntroDisabled = author.id != null &&
+        author.id!.isNotEmpty &&
+        _pendingIntroTargets.contains(author.id);
+    bool requesting = false;
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            Future<void> sendIntro() async {
+              if (requesting || author.id == null || author.id!.isEmpty) return;
+              final msg = await showDialog<String?>(
+                context: context,
+                builder: (context) => _IntroDialog(author: author),
+              );
+              if (msg == null) return;
+              setSheetState(() {
+                requesting = true;
+              });
+              try {
+                await _feedService.requestIntro(
+                  targetUserId: author.id!,
+                  message: msg.trim().isEmpty ? null : msg.trim(),
+                );
+                if (!mounted) return;
+                setState(() {
+                  if (author.id != null) _pendingIntroTargets.add(author.id!);
+                });
+                Navigator.pop(context);
+                showSuccessSnackBar(context, 'Intro request sent');
+              } catch (_) {
+                if (mounted) {
+                  showErrorSnackBar(context, 'Could not send intro right now.');
+                }
+              } finally {
+                setSheetState(() {
+                  requesting = false;
+                });
+              }
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundImage: (author.avatarUrl != null &&
+                                author.avatarUrl!.isNotEmpty)
+                            ? NetworkImage(author.avatarUrl!)
+                            : null,
+                        child: (author.avatarUrl == null ||
+                                author.avatarUrl!.isEmpty)
+                            ? Text(
+                                author.name.isNotEmpty
+                                    ? author.name[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              author.name,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            Text(
+                              '${author.role}${author.affiliation.isNotEmpty ? ' · ${author.affiliation}' : ''}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Tooltip(
+                          message: isIntroDisabled
+                              ? 'You already sent an intro to this member'
+                              : '',
+                          child: ElevatedButton(
+                            onPressed: (author.id == null ||
+                                    author.id!.isEmpty ||
+                                    isIntroDisabled ||
+                                    requesting)
+                                ? null
+                                : sendIntro,
+                            child: requesting
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(isIntroDisabled
+                                    ? 'Intro sent'
+                                    : 'Request intro'),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _loadUserRole() async {
@@ -468,10 +636,22 @@ class _FeedScreenState extends State<FeedScreen> {
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
                         final item = _items[index];
+                        final introPending = item.author.id != null &&
+                            _pendingIntroTargets.contains(item.author.id);
                         return Padding(
                           padding: EdgeInsets.fromLTRB(
                               16, index == 0 ? 16 : 12, 16, 4),
-                          child: FeedCard(data: item),
+                          child: FeedCard(
+                            data: item,
+                            introPending: introPending,
+                            onIntroSent: () {
+                              final id = item.author.id;
+                              if (id == null || id.isEmpty) return;
+                              setState(() {
+                                _pendingIntroTargets.add(id);
+                              });
+                            },
+                          ),
                         );
                       },
                       childCount: _items.length,
@@ -661,29 +841,44 @@ class _PreviewCard extends StatelessWidget {
 }
 
 class FeedCard extends StatelessWidget {
-  const FeedCard({Key? key, required this.data}) : super(key: key);
+  const FeedCard({
+    Key? key,
+    required this.data,
+    this.introPending = false,
+    this.onIntroSent,
+    this.onAuthorTap,
+  }) : super(key: key);
 
   final FeedCardData data;
+  final bool introPending;
+  final VoidCallback? onIntroSent;
+  final VoidCallback? onAuthorTap;
 
   @override
   Widget build(BuildContext context) {
     switch (data.type) {
       case FeedCardType.highlight:
-        return _HighlightCard(data: data);
+        return _HighlightCard(data: data, onAuthorTap: onAuthorTap);
       case FeedCardType.mission:
-        return _MissionCard(data: data);
+        return _MissionCard(data: data, onAuthorTap: onAuthorTap);
       case FeedCardType.investor:
-        return _InvestorCard(data: data);
+        return _InvestorCard(
+          data: data,
+          introPending: introPending,
+          onIntroSent: onIntroSent,
+          onAuthorTap: onAuthorTap,
+        );
       case FeedCardType.update:
-        return _UpdateCard(data: data);
+        return _UpdateCard(data: data, onAuthorTap: onAuthorTap);
     }
   }
 }
 
 class _UpdateCard extends StatelessWidget {
-  const _UpdateCard({required this.data});
+  const _UpdateCard({required this.data, this.onAuthorTap});
 
   final FeedCardData data;
+  final VoidCallback? onAuthorTap;
 
   @override
   Widget build(BuildContext context) {
@@ -697,7 +892,7 @@ class _UpdateCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AvatarNameRow(author: data.author),
+            AvatarNameRow(author: data.author, onTap: onAuthorTap),
             const SizedBox(height: 12),
             Text(
               data.subtitle,
@@ -721,9 +916,10 @@ class _UpdateCard extends StatelessWidget {
 }
 
 class _HighlightCard extends StatelessWidget {
-  const _HighlightCard({required this.data});
+  const _HighlightCard({required this.data, this.onAuthorTap});
 
   final FeedCardData data;
+  final VoidCallback? onAuthorTap;
 
   @override
   Widget build(BuildContext context) {
@@ -785,7 +981,7 @@ class _HighlightCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AvatarNameRow(author: data.author),
+                AvatarNameRow(author: data.author, onTap: onAuthorTap),
                 if (data.ask != null) ...[
                   const SizedBox(height: 10),
                   _AskChip(label: data.ask!),
@@ -806,9 +1002,10 @@ class _HighlightCard extends StatelessWidget {
 }
 
 class _MissionCard extends StatelessWidget {
-  const _MissionCard({required this.data});
+  const _MissionCard({required this.data, this.onAuthorTap});
 
   final FeedCardData data;
+  final VoidCallback? onAuthorTap;
 
   @override
   Widget build(BuildContext context) {
@@ -827,7 +1024,7 @@ class _MissionCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(child: AvatarNameRow(author: data.author)),
+                Expanded(child: AvatarNameRow(author: data.author, onTap: onAuthorTap)),
                 if (data.reward != null)
                   Container(
                     padding:
@@ -909,9 +1106,17 @@ class _MissionCard extends StatelessWidget {
 }
 
 class _InvestorCard extends StatefulWidget {
-  const _InvestorCard({required this.data});
+  const _InvestorCard({
+    required this.data,
+    this.introPending = false,
+    this.onIntroSent,
+    this.onAuthorTap,
+  });
 
   final FeedCardData data;
+  final bool introPending;
+  final VoidCallback? onIntroSent;
+  final VoidCallback? onAuthorTap;
 
   @override
   State<_InvestorCard> createState() => _InvestorCardState();
@@ -920,6 +1125,22 @@ class _InvestorCard extends StatefulWidget {
 class _InvestorCardState extends State<_InvestorCard> {
   bool _requesting = false;
   bool _introSent = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _introSent = widget.introPending;
+  }
+
+  @override
+  void didUpdateWidget(covariant _InvestorCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.introPending && !_introSent) {
+      setState(() {
+        _introSent = true;
+      });
+    }
+  }
 
   Future<void> _handleRequestIntro() async {
     if (_requesting || _introSent) return;
@@ -943,6 +1164,7 @@ class _InvestorCardState extends State<_InvestorCard> {
       );
       if (!mounted) return;
       setState(() => _introSent = true);
+      widget.onIntroSent?.call();
       showSuccessSnackBar(context, 'Intro request sent');
     } catch (_) {
       if (!mounted) return;
@@ -959,6 +1181,7 @@ class _InvestorCardState extends State<_InvestorCard> {
     final theme = Theme.of(context);
     final data = widget.data;
     final accent = _roleAccent(data.author.role, theme);
+    final disabled = _requesting || _introSent || widget.introPending;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -969,7 +1192,7 @@ class _InvestorCardState extends State<_InvestorCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AvatarNameRow(author: data.author),
+            AvatarNameRow(author: data.author, onTap: widget.onAuthorTap),
             const SizedBox(height: 10),
             Text(
               data.title,
@@ -1002,21 +1225,25 @@ class _InvestorCardState extends State<_InvestorCard> {
             const SizedBox(height: 12),
             Row(
               children: [
-                ElevatedButton(
-                  onPressed: _requesting || _introSent ? null : _handleRequestIntro,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 12,
+                Tooltip(
+                  message:
+                      disabled ? 'You already sent an intro to this member' : '',
+                  child: ElevatedButton(
+                    onPressed: disabled ? null : _handleRequestIntro,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 12,
+                      ),
                     ),
+                    child: _requesting
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(disabled ? 'Intro sent' : 'Request intro'),
                   ),
-                  child: _requesting
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(_introSent ? 'Intro sent' : 'Request intro'),
                 ),
                 const SizedBox(width: 12),
                 OutlinedButton(
@@ -1043,9 +1270,11 @@ class _InvestorCardState extends State<_InvestorCard> {
 }
 
 class AvatarNameRow extends StatelessWidget {
-  const AvatarNameRow({Key? key, required this.author}) : super(key: key);
+  const AvatarNameRow({Key? key, required this.author, this.onTap})
+      : super(key: key);
 
   final FeedAuthor author;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1053,7 +1282,7 @@ class AvatarNameRow extends StatelessWidget {
     final accent = _roleAccent(author.role, theme);
     final initial = author.name.isNotEmpty ? author.name[0].toUpperCase() : '?';
 
-    return Row(
+    final content = Row(
       children: [
         CircleAvatar(
           backgroundColor: accent.withValues(alpha: 0.16),
@@ -1090,6 +1319,12 @@ class AvatarNameRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+
+    if (onTap == null) return content;
+    return InkWell(
+      onTap: onTap,
+      child: content,
     );
   }
 }
