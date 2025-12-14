@@ -21,11 +21,13 @@ class _FeedScreenState extends State<FeedScreen> {
   final Set<String> _activeFilters = {'Personalized'};
   final _repo = FeedRepository();
   final _feedService = FeedService();
+  final _profileService = SupabaseService();
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
   SharedPreferences? _prefs;
   List<FeedCardData> _items = [];
   final Set<String> _pendingIntroTargets = {};
+  final Map<String, ContactRequestStatus> _introStatusByTarget = {};
   bool _loading = true;
   bool _refreshing = false;
   bool _loadingMore = false;
@@ -70,10 +72,19 @@ class _FeedScreenState extends State<FeedScreen> {
           .map((r) => r.target.id)
           .where((id) => id.isNotEmpty)
           .toSet();
+      final statusMap = <String, ContactRequestStatus>{};
+      for (final r in sent) {
+        if (r.target.id.isNotEmpty) {
+          statusMap[r.target.id] = r.status;
+        }
+      }
       setState(() {
         _pendingIntroTargets
           ..clear()
           ..addAll(targets);
+        _introStatusByTarget
+          ..clear()
+          ..addAll(statusMap);
       });
     } catch (_) {
       // ignore failures; intro disabling will be best-effort.
@@ -172,6 +183,54 @@ class _FeedScreenState extends State<FeedScreen> {
                               '${author.role}${author.affiliation.isNotEmpty ? ' · ${author.affiliation}' : ''}',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: [
+                                Chip(
+                                  label: Text(author.role),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                if (author.timeAgo.isNotEmpty)
+                                  Chip(
+                                    label: Text('Posted ${author.timeAgo} ago'),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                if (author.affiliation.isNotEmpty)
+                                  Chip(
+                                    label: Text(author.affiliation),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            if (author.id != null && author.id!.isNotEmpty)
+                              FutureBuilder<Map<String, dynamic>?>(
+                                future: _profileService.fetchRoleDetailsForUser(
+                                    author.id!, author.role),
+                                builder: (context, snap) {
+                                  if (snap.connectionState ==
+                                      ConnectionState.waiting) {
+                                    return const Padding(
+                                      padding: EdgeInsets.only(top: 4),
+                                      child: SizedBox(
+                                        height: 18,
+                                        width: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  final d = snap.data;
+                                  if (d == null) return const SizedBox.shrink();
+                                  return _RoleDetailChips(
+                                    role: author.role,
+                                    details: d,
+                                  );
+                                },
+                              ),
                           ],
                         ),
                       ),
@@ -401,6 +460,18 @@ class _FeedScreenState extends State<FeedScreen> {
     }
   }
 
+  void _openFeedDetail(FeedCardData data) {
+    Navigator.pushNamed(
+      context,
+      '/feed/item',
+      arguments: {'id': data.id, 'data': data},
+    );
+  }
+
+  void _openIntros({int initialTab = 0}) {
+    Navigator.pushNamed(context, '/intros', arguments: {'initialTab': initialTab});
+  }
+
   void _applySearch(String term) {
     final trimmed = term.trim();
     setState(() {
@@ -474,7 +545,7 @@ class _FeedScreenState extends State<FeedScreen> {
             icon: const Icon(Icons.mail_outline),
             tooltip: 'Intros',
             onPressed: () {
-              Navigator.pushNamed(context, '/intros');
+              _openIntros(initialTab: 0);
             },
           ),
           if (_showSeedDialog && _isLoggedIn)
@@ -638,12 +709,16 @@ class _FeedScreenState extends State<FeedScreen> {
                         final item = _items[index];
                         final introPending = item.author.id != null &&
                             _pendingIntroTargets.contains(item.author.id);
+                        final introStatus = item.author.id != null
+                            ? _introStatusByTarget[item.author.id!]
+                            : null;
                         return Padding(
                           padding: EdgeInsets.fromLTRB(
                               16, index == 0 ? 16 : 12, 16, 4),
                           child: FeedCard(
                             data: item,
                             introPending: introPending,
+                            introStatus: introStatus,
                             onIntroSent: () {
                               final id = item.author.id;
                               if (id == null || id.isEmpty) return;
@@ -651,6 +726,9 @@ class _FeedScreenState extends State<FeedScreen> {
                                 _pendingIntroTargets.add(id);
                               });
                             },
+                            onAuthorTap: () => _openAuthorProfile(item.author),
+                            onTap: () => _openFeedDetail(item),
+                            onIntroStatusTap: () => _openIntros(initialTab: 1),
                           ),
                         );
                       },
@@ -845,45 +923,55 @@ class FeedCard extends StatelessWidget {
     Key? key,
     required this.data,
     this.introPending = false,
+    this.introStatus,
     this.onIntroSent,
     this.onAuthorTap,
+    this.onTap,
+    this.onIntroStatusTap,
   }) : super(key: key);
 
   final FeedCardData data;
   final bool introPending;
+  final ContactRequestStatus? introStatus;
   final VoidCallback? onIntroSent;
   final VoidCallback? onAuthorTap;
+  final VoidCallback? onTap;
+  final VoidCallback? onIntroStatusTap;
 
   @override
   Widget build(BuildContext context) {
     switch (data.type) {
       case FeedCardType.highlight:
-        return _HighlightCard(data: data, onAuthorTap: onAuthorTap);
+        return _HighlightCard(data: data, onAuthorTap: onAuthorTap, onTap: onTap);
       case FeedCardType.mission:
-        return _MissionCard(data: data, onAuthorTap: onAuthorTap);
+        return _MissionCard(data: data, onAuthorTap: onAuthorTap, onTap: onTap);
       case FeedCardType.investor:
         return _InvestorCard(
           data: data,
           introPending: introPending,
+          introStatus: introStatus,
           onIntroSent: onIntroSent,
           onAuthorTap: onAuthorTap,
+          onIntroStatusTap: onIntroStatusTap,
+          onTap: onTap,
         );
       case FeedCardType.update:
-        return _UpdateCard(data: data, onAuthorTap: onAuthorTap);
+        return _UpdateCard(data: data, onAuthorTap: onAuthorTap, onTap: onTap);
     }
   }
 }
 
 class _UpdateCard extends StatelessWidget {
-  const _UpdateCard({required this.data, this.onAuthorTap});
+  const _UpdateCard({required this.data, this.onAuthorTap, this.onTap});
 
   final FeedCardData data;
   final VoidCallback? onAuthorTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
+    final card = Card(
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       elevation: 2,
@@ -912,21 +1000,28 @@ class _UpdateCard extends StatelessWidget {
         ),
       ),
     );
+    if (onTap == null) return card;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: card,
+    );
   }
 }
 
 class _HighlightCard extends StatelessWidget {
-  const _HighlightCard({required this.data, this.onAuthorTap});
+  const _HighlightCard({required this.data, this.onAuthorTap, this.onTap});
 
   final FeedCardData data;
   final VoidCallback? onAuthorTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = _roleAccent(data.author.role, theme);
 
-    return Card(
+    final card = Card(
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
@@ -998,21 +1093,28 @@ class _HighlightCard extends StatelessWidget {
         ],
       ),
     );
+    if (onTap == null) return card;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: card,
+    );
   }
 }
 
 class _MissionCard extends StatelessWidget {
-  const _MissionCard({required this.data, this.onAuthorTap});
+  const _MissionCard({required this.data, this.onAuthorTap, this.onTap});
 
   final FeedCardData data;
   final VoidCallback? onAuthorTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = _roleAccent(data.author.role, theme);
 
-    return Card(
+    final card = Card(
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       elevation: 2,
@@ -1102,6 +1204,12 @@ class _MissionCard extends StatelessWidget {
         ),
       ),
     );
+    if (onTap == null) return card;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: card,
+    );
   }
 }
 
@@ -1109,14 +1217,20 @@ class _InvestorCard extends StatefulWidget {
   const _InvestorCard({
     required this.data,
     this.introPending = false,
+    this.introStatus,
     this.onIntroSent,
     this.onAuthorTap,
+    this.onTap,
+    this.onIntroStatusTap,
   });
 
   final FeedCardData data;
   final bool introPending;
+  final ContactRequestStatus? introStatus;
   final VoidCallback? onIntroSent;
   final VoidCallback? onAuthorTap;
+  final VoidCallback? onTap;
+  final VoidCallback? onIntroStatusTap;
 
   @override
   State<_InvestorCard> createState() => _InvestorCardState();
@@ -1183,7 +1297,7 @@ class _InvestorCardState extends State<_InvestorCard> {
     final accent = _roleAccent(data.author.role, theme);
     final disabled = _requesting || _introSent || widget.introPending;
 
-    return Card(
+    final card = Card(
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       elevation: 2,
@@ -1193,6 +1307,19 @@ class _InvestorCardState extends State<_InvestorCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             AvatarNameRow(author: data.author, onTap: widget.onAuthorTap),
+            if (widget.introPending || _introSent || widget.introStatus != null) ...[
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: widget.onIntroStatusTap,
+                child: Chip(
+                  label: Text(_chipLabel(widget.introStatus)),
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: _chipColor(widget.introStatus, accent),
+                  labelStyle: theme.textTheme.labelMedium
+                      ?.copyWith(color: accent, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             Text(
               data.title,
@@ -1265,6 +1392,12 @@ class _InvestorCardState extends State<_InvestorCard> {
           ],
         ),
       ),
+    );
+    if (widget.onTap == null) return card;
+    return InkWell(
+      onTap: widget.onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: card,
     );
   }
 }
@@ -1948,6 +2081,30 @@ Color _roleAccent(String role, ThemeData theme) {
   }
 }
 
+String _chipLabel(ContactRequestStatus? status) {
+  switch (status) {
+    case ContactRequestStatus.accepted:
+      return 'Intro accepted';
+    case ContactRequestStatus.declined:
+      return 'Intro declined';
+    case ContactRequestStatus.pending:
+    case null:
+      return 'Intro sent';
+  }
+}
+
+Color _chipColor(ContactRequestStatus? status, Color accent) {
+  switch (status) {
+    case ContactRequestStatus.accepted:
+      return Colors.green.withValues(alpha: 0.14);
+    case ContactRequestStatus.declined:
+      return Colors.red.withValues(alpha: 0.14);
+    case ContactRequestStatus.pending:
+    case null:
+      return accent.withValues(alpha: 0.14);
+  }
+}
+
 class _FeedSkeleton extends StatelessWidget {
   const _FeedSkeleton();
 
@@ -1963,6 +2120,75 @@ class _FeedSkeleton extends StatelessWidget {
         },
         childCount: 3,
       ),
+    );
+  }
+}
+
+class _RoleDetailChips extends StatelessWidget {
+  const _RoleDetailChips({required this.role, required this.details});
+
+  final String role;
+  final Map<String, dynamic> details;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = role.toLowerCase();
+    final chips = <Widget>[];
+
+    if (r == 'investor') {
+      final type = details['investor_type']?.toString();
+      final ticket = details['ticket_size']?.toString();
+      final stages =
+          (details['stages'] as List?)?.map((e) => e.toString()).toList() ?? [];
+      if (type != null && type.isNotEmpty) {
+        chips.add(_chip(type));
+      }
+      if (ticket != null && ticket.isNotEmpty) {
+        chips.add(_chip('Tickets: $ticket'));
+      }
+      if (stages.isNotEmpty) {
+        chips.add(_chip('Stages: ${stages.join(', ')}'));
+      }
+    } else if (r == 'founder') {
+      final stage = details['stage']?.toString();
+      final startup = details['startup_name']?.toString();
+      final looking =
+          (details['looking_for'] as List?)?.map((e) => e.toString()).toList() ??
+              [];
+      if (startup != null && startup.isNotEmpty) chips.add(_chip(startup));
+      if (stage != null && stage.isNotEmpty) chips.add(_chip('Stage: $stage'));
+      if (looking.isNotEmpty) {
+        chips.add(_chip('Looking: ${looking.join(', ')}'));
+      }
+    } else if (r == 'end-user' || r == 'enduser') {
+      final roleMain = details['main_role']?.toString();
+      final exp = details['experience_level']?.toString();
+      final interests =
+          (details['interests'] as List?)?.map((e) => e.toString()).toList() ??
+              [];
+      if (roleMain != null && roleMain.isNotEmpty) chips.add(_chip(roleMain));
+      if (exp != null && exp.isNotEmpty) chips.add(_chip('Experience: $exp'));
+      if (interests.isNotEmpty) {
+        chips.add(_chip('Interests: ${interests.join(', ')}'));
+      }
+    }
+
+    if (chips.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        children: chips,
+      ),
+    );
+  }
+
+  Widget _chip(String label) {
+    return Chip(
+      label: Text(label),
+      visualDensity: VisualDensity.compact,
     );
   }
 }

@@ -6,6 +6,7 @@ class SupabaseService {
 
   User? get currentUser => _client.auth.currentUser;
   Map<String, dynamic>? _profileCache;
+  final Map<String, Map<String, dynamic>?> _roleDetailsCache = {};
 
   Future<Map<String, dynamic>?> fetchProfile({bool forceRefresh = false}) async {
     if (!forceRefresh && _profileCache != null) return _profileCache;
@@ -48,6 +49,44 @@ class SupabaseService {
             .select()
             .eq('user_id', user.id)
             .maybeSingle();
+      default:
+        return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> fetchRoleDetailsForUser(
+      String userId, String role,
+      {bool forceRefresh = false}) async {
+    if (!forceRefresh) {
+      final cached = _roleDetailsCache['$userId:$role'];
+      if (cached != null) return cached;
+    }
+    switch (role.toLowerCase()) {
+      case 'founder':
+        final res = await _client
+            .from('founder_details')
+            .select()
+            .eq('user_id', userId)
+            .maybeSingle();
+        _roleDetailsCache['$userId:$role'] = res;
+        return res;
+      case 'investor':
+        final res = await _client
+            .from('investor_details')
+            .select()
+            .eq('user_id', userId)
+            .maybeSingle();
+        _roleDetailsCache['$userId:$role'] = res;
+        return res;
+      case 'end-user':
+      case 'enduser':
+        final res = await _client
+            .from('enduser_details')
+            .select()
+            .eq('user_id', userId)
+            .maybeSingle();
+        _roleDetailsCache['$userId:$role'] = res;
+        return res;
       default:
         return null;
     }
@@ -195,5 +234,6 @@ class SupabaseService {
 
   void clearProfileCache() {
     _profileCache = null;
+    _roleDetailsCache.clear();
   }
 }

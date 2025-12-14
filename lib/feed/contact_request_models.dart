@@ -38,6 +38,7 @@ class ContactRequest {
     this.message,
     this.feedItemId,
     this.feedItemTitle,
+    this.notes,
   });
 
   final String id;
@@ -48,6 +49,7 @@ class ContactRequest {
   final String? message;
   final String? feedItemId;
   final String? feedItemTitle;
+  final String? notes;
 
   bool get isPending => status == ContactRequestStatus.pending;
 }

@@ -3,11 +3,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/snackbar.dart';
 import 'contact_request_models.dart';
 import 'feed_service.dart';
-import 'feed_repository.dart';
 import 'feed_models.dart';
+import '../services/supabase_service.dart';
 
 class ContactRequestsScreen extends StatefulWidget {
-  const ContactRequestsScreen({super.key});
+  const ContactRequestsScreen({super.key, this.initialTab = 0});
+
+  final int initialTab;
 
   @override
   State<ContactRequestsScreen> createState() => _ContactRequestsScreenState();
@@ -15,8 +17,20 @@ class ContactRequestsScreen extends StatefulWidget {
 
 class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
   final _service = FeedService();
+  final _profileService = SupabaseService();
   final Map<String, bool> _updating = {};
+  final Map<String, bool> _updatingNotes = {};
   final Set<String> _introDisabled = {};
+  final Set<ContactRequestStatus> _incomingFilters = {
+    ContactRequestStatus.pending,
+    ContactRequestStatus.accepted,
+    ContactRequestStatus.declined,
+  };
+  final Set<ContactRequestStatus> _outgoingFilters = {
+    ContactRequestStatus.pending,
+    ContactRequestStatus.accepted,
+    ContactRequestStatus.declined,
+  };
   List<ContactRequest> _incoming = [];
   List<ContactRequest> _outgoing = [];
   bool _loadingIncoming = true;
@@ -48,9 +62,8 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
         _incoming = data;
         _loadingIncoming = false;
         _introDisabled.addAll(
-          data
-              .where((r) => r.status != ContactRequestStatus.declined)
-              .map((r) => r.requester.id == _userId ? r.target.id : r.requester.id),
+          data.where((r) => r.status != ContactRequestStatus.declined).map(
+              (r) => r.requester.id == _userId ? r.target.id : r.requester.id),
         );
       });
     } catch (_) {
@@ -115,7 +128,8 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
               await _loadIncoming();
               await _loadOutgoing();
               if (mounted) {
-                showSuccessSnackBar(context, 'Reverted to ${previousStatus.name}');
+                showSuccessSnackBar(
+                    context, 'Reverted to ${previousStatus.name}');
               }
             } catch (_) {
               if (mounted) {
@@ -133,6 +147,57 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
       if (mounted) {
         setState(() {
           _updating.remove(request.id);
+        });
+      }
+    }
+  }
+
+  Future<void> _editNotes(ContactRequest request) async {
+    if (_updatingNotes[request.id] == true) return;
+    final controller = TextEditingController(text: request.notes ?? '');
+    final notes = await showDialog<String?>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add note'),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            labelText: 'Notes (visible to both sides)',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (notes == null) return;
+    setState(() {
+      _updatingNotes[request.id] = true;
+    });
+    try {
+      await _service.updateContactRequestNotes(id: request.id, notes: notes);
+      await _loadIncoming();
+      await _loadOutgoing();
+      if (mounted) {
+        showSuccessSnackBar(context, 'Notes updated');
+      }
+    } catch (_) {
+      if (mounted) {
+        showErrorSnackBar(context, 'Could not update notes.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _updatingNotes.remove(request.id);
         });
       }
     }
@@ -164,6 +229,7 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
 
     return DefaultTabController(
       length: 2,
+      initialIndex: widget.initialTab.clamp(0, 1),
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Intros'),
@@ -182,12 +248,26 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
               error: _errorIncoming,
               onRefresh: _loadIncoming,
               currentUserId: _userId!,
-              onAccept: (req) => _updateStatus(req, ContactRequestStatus.accepted),
-              onDecline: (req) => _updateStatus(req, ContactRequestStatus.declined),
+              onAccept: (req) =>
+                  _updateStatus(req, ContactRequestStatus.accepted),
+              onDecline: (req) =>
+                  _updateStatus(req, ContactRequestStatus.declined),
               updating: _updating,
               isIncomingTab: true,
               onOpenFeedItem: _openFeedItem,
               onAuthorTap: _openAuthorSheet,
+              statusFilters: _incomingFilters,
+              onToggleStatus: (status) {
+                setState(() {
+                  if (_incomingFilters.contains(status)) {
+                    _incomingFilters.remove(status);
+                  } else {
+                    _incomingFilters.add(status);
+                  }
+                });
+              },
+              onEditNotes: _editNotes,
+              updatingNotes: _updatingNotes,
             ),
             _RequestList(
               requests: _outgoing,
@@ -201,6 +281,18 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
               isIncomingTab: false,
               onOpenFeedItem: _openFeedItem,
               onAuthorTap: _openAuthorSheet,
+              statusFilters: _outgoingFilters,
+              onToggleStatus: (status) {
+                setState(() {
+                  if (_outgoingFilters.contains(status)) {
+                    _outgoingFilters.remove(status);
+                  } else {
+                    _outgoingFilters.add(status);
+                  }
+                });
+              },
+              onEditNotes: _editNotes,
+              updatingNotes: _updatingNotes,
             ),
           ],
         ),
@@ -220,6 +312,9 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
   Future<void> _openAuthorSheet(ContactRequestParty party) async {
     if (!mounted) return;
     bool requesting = false;
+    final detailsFuture = party.id.isNotEmpty
+        ? _profileService.fetchRoleDetailsForUser(party.id, party.role)
+        : Future.value(null);
     await showModalBottomSheet(
       context: context,
       showDragHandle: true,
@@ -297,7 +392,8 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
                                 party.avatarUrl!.isNotEmpty)
                             ? NetworkImage(party.avatarUrl!)
                             : null,
-                        child: (party.avatarUrl == null || party.avatarUrl!.isEmpty)
+                        child: (party.avatarUrl == null ||
+                                party.avatarUrl!.isEmpty)
                             ? Text(
                                 party.name.isNotEmpty
                                     ? party.name[0].toUpperCase()
@@ -325,6 +421,44 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
                               '${party.role}${party.headline.isNotEmpty ? ' · ${party.headline}' : ''}',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: [
+                                Chip(
+                                  label: Text(party.role),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                if (party.headline.isNotEmpty)
+                                  Chip(
+                                    label: Text(party.headline),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            FutureBuilder<Map<String, dynamic>?>(
+                              future: detailsFuture,
+                              builder: (context, snap) {
+                                if (snap.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const Padding(
+                                    padding: EdgeInsets.only(top: 4),
+                                    child: SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    ),
+                                  );
+                                }
+                                final d = snap.data;
+                                if (d == null) return const SizedBox.shrink();
+                                return _RoleDetailChips(
+                                    role: party.role, details: d);
+                              },
+                            ),
                           ],
                         ),
                       ),
@@ -339,16 +473,19 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
                               ? 'You already sent an intro to this member'
                               : '',
                           child: ElevatedButton(
-                            onPressed: (party.id.isEmpty || disabled || requesting)
-                                ? null
-                                : sendIntro,
+                            onPressed:
+                                (party.id.isEmpty || disabled || requesting)
+                                    ? null
+                                    : sendIntro,
                             child: requesting
                                 ? const SizedBox(
                                     width: 18,
                                     height: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
                                   )
-                                : Text(disabled ? 'Intro sent' : 'Request intro'),
+                                : Text(
+                                    disabled ? 'Intro sent' : 'Request intro'),
                           ),
                         ),
                       ),
@@ -383,8 +520,12 @@ class _RequestList extends StatelessWidget {
     required this.isIncomingTab,
     required this.onOpenFeedItem,
     required this.onAuthorTap,
+    required this.statusFilters,
+    required this.onToggleStatus,
     this.onAccept,
     this.onDecline,
+    required this.onEditNotes,
+    required this.updatingNotes,
   });
 
   final List<ContactRequest> requests;
@@ -397,8 +538,12 @@ class _RequestList extends StatelessWidget {
   final Future<void> Function(String feedItemId, [FeedCardData? initial])
       onOpenFeedItem;
   final void Function(ContactRequestParty) onAuthorTap;
+  final Set<ContactRequestStatus> statusFilters;
+  final void Function(ContactRequestStatus) onToggleStatus;
   final void Function(ContactRequest)? onAccept;
   final void Function(ContactRequest)? onDecline;
+  final void Function(ContactRequest) onEditNotes;
+  final Map<String, bool> updatingNotes;
 
   @override
   Widget build(BuildContext context) {
@@ -439,19 +584,32 @@ class _RequestList extends StatelessWidget {
       );
     }
 
+    final filtered =
+        requests.where((r) => statusFilters.contains(r.status)).toList();
+
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: ListView.separated(
         padding: const EdgeInsets.all(16),
-        itemCount: requests.length,
+        itemCount: filtered.length + 1,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
-          final req = requests[index];
+          if (index == 0) {
+            return _StatusFilters(
+              selected: statusFilters,
+              onToggle: onToggleStatus,
+            );
+          }
+          final req = filtered[index - 1];
           final isIncoming = currentUserId == req.target.id;
           final other = isIncoming ? req.requester : req.target;
-          final canAct =
-              isIncomingTab && isIncoming && req.isPending && onAccept != null && onDecline != null;
+          final canAct = isIncomingTab &&
+              isIncoming &&
+              req.isPending &&
+              onAccept != null &&
+              onDecline != null;
           final isUpdating = updating[req.id] == true;
+          final isUpdatingNotes = updatingNotes[req.id] == true;
           return _RequestCard(
             request: req,
             other: other,
@@ -459,7 +617,8 @@ class _RequestList extends StatelessWidget {
             canAct: canAct,
             isUpdating: isUpdating,
             onAccept: canAct && onAccept != null ? () => onAccept!(req) : null,
-            onDecline: canAct && onDecline != null ? () => onDecline!(req) : null,
+            onDecline:
+                canAct && onDecline != null ? () => onDecline!(req) : null,
             onOpenFeed: req.feedItemId == null
                 ? null
                 : () => onOpenFeedItem(req.feedItemId!, null),
@@ -467,6 +626,8 @@ class _RequestList extends StatelessWidget {
               final party = isIncoming ? req.requester : req.target;
               onAuthorTap(party);
             },
+            onEditNotes: () => onEditNotes(req),
+            editingNotes: isUpdatingNotes,
           );
         },
       ),
@@ -485,6 +646,8 @@ class _RequestCard extends StatelessWidget {
     this.onDecline,
     this.onOpenFeed,
     this.onAuthorTap,
+    this.onEditNotes,
+    this.editingNotes = false,
   });
 
   final ContactRequest request;
@@ -496,6 +659,8 @@ class _RequestCard extends StatelessWidget {
   final VoidCallback? onDecline;
   final VoidCallback? onOpenFeed;
   final VoidCallback? onAuthorTap;
+  final VoidCallback? onEditNotes;
+  final bool editingNotes;
 
   @override
   Widget build(BuildContext context) {
@@ -520,9 +685,10 @@ class _RequestCard extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     backgroundColor: accent.withValues(alpha: 0.16),
-                    backgroundImage: (other.avatarUrl != null && other.avatarUrl!.isNotEmpty)
-                        ? NetworkImage(other.avatarUrl!)
-                        : null,
+                    backgroundImage:
+                        (other.avatarUrl != null && other.avatarUrl!.isNotEmpty)
+                            ? NetworkImage(other.avatarUrl!)
+                            : null,
                     child: (other.avatarUrl == null || other.avatarUrl!.isEmpty)
                         ? Text(
                             initial,
@@ -540,7 +706,8 @@ class _RequestCard extends StatelessWidget {
                       children: [
                         Text(
                           other.name,
-                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                          style: theme.textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                         Text(
                           '${other.role}${other.headline.isNotEmpty ? ' · ${other.headline}' : ''}',
@@ -554,9 +721,11 @@ class _RequestCard extends StatelessWidget {
                             Chip(
                               label: Text(statusLabel),
                               visualDensity: VisualDensity.compact,
-                              backgroundColor: statusColor.withValues(alpha: 0.14),
-                              labelStyle: theme.textTheme.labelMedium
-                                  ?.copyWith(color: statusColor, fontWeight: FontWeight.w700),
+                              backgroundColor:
+                                  statusColor.withValues(alpha: 0.14),
+                              labelStyle: theme.textTheme.labelMedium?.copyWith(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w700),
                             ),
                             Text(
                               isIncoming ? 'Incoming' : 'Sent',
@@ -578,9 +747,22 @@ class _RequestCard extends StatelessWidget {
               ),
               const SizedBox(height: 10),
             ],
+            if (request.notes != null && request.notes!.isNotEmpty) ...[
+              Text(
+                'Notes',
+                style: theme.textTheme.labelMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                request.notes!,
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 10),
+            ],
             Row(
               children: [
-                Icon(Icons.access_time, size: 16, color: theme.colorScheme.outline),
+                Icon(Icons.access_time,
+                    size: 16, color: theme.colorScheme.outline),
                 const SizedBox(width: 6),
                 Text(
                   'Requested $timeAgo',
@@ -606,6 +788,22 @@ class _RequestCard extends StatelessWidget {
                       ],
                     ),
                   ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: editingNotes ? null : onEditNotes,
+                  icon: editingNotes
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.edit_note_outlined),
+                  label: const Text('Add note'),
+                ),
               ],
             ),
             if (canAct) ...[
@@ -647,6 +845,31 @@ class _RequestCard extends StatelessWidget {
   }
 }
 
+class _StatusFilters extends StatelessWidget {
+  const _StatusFilters({required this.selected, required this.onToggle});
+
+  final Set<ContactRequestStatus> selected;
+  final void Function(ContactRequestStatus) onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final options = ContactRequestStatus.values;
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: options
+          .map(
+            (s) => FilterChip(
+              label: Text(s.name),
+              selected: selected.contains(s),
+              onSelected: (_) => onToggle(s),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
 Color _statusColor(ContactRequestStatus status, ThemeData theme) {
   switch (status) {
     case ContactRequestStatus.accepted:
@@ -670,6 +893,74 @@ Color _roleAccent(String role, ThemeData theme) {
       return Colors.orange;
     default:
       return theme.colorScheme.primary;
+  }
+}
+
+class _RoleDetailChips extends StatelessWidget {
+  const _RoleDetailChips({required this.role, required this.details});
+
+  final String role;
+  final Map<String, dynamic> details;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = role.toLowerCase();
+    final chips = <Widget>[];
+
+    if (r == 'investor') {
+      final type = details['investor_type']?.toString();
+      final ticket = details['ticket_size']?.toString();
+      final stages =
+          (details['stages'] as List?)?.map((e) => e.toString()).toList() ?? [];
+      if (type != null && type.isNotEmpty) chips.add(_chip(type));
+      if (ticket != null && ticket.isNotEmpty) {
+        chips.add(_chip('Tickets: $ticket'));
+      }
+      if (stages.isNotEmpty) {
+        chips.add(_chip('Stages: ${stages.join(', ')}'));
+      }
+    } else if (r == 'founder') {
+      final stage = details['stage']?.toString();
+      final startup = details['startup_name']?.toString();
+      final looking = (details['looking_for'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [];
+      if (startup != null && startup.isNotEmpty) chips.add(_chip(startup));
+      if (stage != null && stage.isNotEmpty) chips.add(_chip('Stage: $stage'));
+      if (looking.isNotEmpty) {
+        chips.add(_chip('Looking: ${looking.join(', ')}'));
+      }
+    } else if (r == 'end-user' || r == 'enduser') {
+      final roleMain = details['main_role']?.toString();
+      final exp = details['experience_level']?.toString();
+      final interests =
+          (details['interests'] as List?)?.map((e) => e.toString()).toList() ??
+              [];
+      if (roleMain != null && roleMain.isNotEmpty) chips.add(_chip(roleMain));
+      if (exp != null && exp.isNotEmpty) chips.add(_chip('Experience: $exp'));
+      if (interests.isNotEmpty) {
+        chips.add(_chip('Interests: ${interests.join(', ')}'));
+      }
+    }
+
+    if (chips.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        children: chips,
+      ),
+    );
+  }
+
+  Widget _chip(String label) {
+    return Chip(
+      label: Text(label),
+      visualDensity: VisualDensity.compact,
+    );
   }
 }
 

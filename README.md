@@ -323,6 +323,14 @@ FeedScreen
 - Duplicate intro guard: investor cards are disabled when you’ve already sent (or have a pending/accepted) intro to that member.
 - Author profile sheet: tap an author in the feed to open a bottom sheet with their info and request-intro action (respects duplicate-intro guard).
 - Inbox authors open a profile sheet (with intro action); “Via feed” still links to the feed item for context.
+- Profile sheets now show role chips and headline/affiliation for more context.
+- Role-specific context: profile sheets fetch investor type/ticket/stages, founder stage/startup/looking-for, and end-user role/experience/interests.
+- Role details are cached per user/role for faster repeat loads.
+- Feed list taps open the detailed feed-item route; investor cards show an “Intro sent” badge when applicable.
+- Feed-item detail includes profile opener and intro action (for investor items); investor cards link to sent intros.
+- Intro inbox has status filters (pending/accepted/declined) and richer author sheets.
+- Intro requests now support participant-visible notes that can be added/edited from the inbox.
+- Feed-item detail has a copy-link action (deep link: startupper://feed/{id}).
 
 ## Platform Support
 

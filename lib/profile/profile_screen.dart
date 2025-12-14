@@ -627,7 +627,7 @@ class _ProfileEditForm extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           DropdownButtonFormField<String>(
-            value: role,
+            initialValue: role,
             decoration: const InputDecoration(
               labelText: 'Role',
               border: OutlineInputBorder(),

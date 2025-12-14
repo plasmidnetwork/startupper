@@ -164,7 +164,14 @@ class _StartupperAppState extends State<StartupperApp> {
         '/onboarding/end_user': (context) => const EndUserOnboardingScreen(),
         '/feed': (context) => const FeedScreen(),
         '/profile': (context) => const ProfileScreen(),
-        '/intros': (context) => const ContactRequestsScreen(),
+        '/intros': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          int initialTab = 0;
+          if (args is Map && args['initialTab'] is int) {
+            initialTab = args['initialTab'] as int;
+          }
+          return ContactRequestsScreen(initialTab: initialTab);
+        },
         '/feed/item': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
           String? id;

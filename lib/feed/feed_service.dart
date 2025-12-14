@@ -74,7 +74,7 @@ class FeedService {
     final List<dynamic> rows = await _client
         .from('contact_requests')
         .select('id, status, message, feed_item_id, created_at, '
-            'feed_item:feed_items(id, content), '
+            'notes, feed_item:feed_items(id, content), '
             'requester:profiles!contact_requests_requester_fkey(id, full_name, role, headline, avatar_url), '
             'target:profiles!contact_requests_target_fkey(id, full_name, role, headline, avatar_url)')
         .eq(filterColumn, userId)
@@ -99,6 +99,19 @@ class FeedService {
     await _client.from('contact_requests').update({
       'status': status.name,
       'status_changed_at': DateTime.now().toIso8601String(),
+    }).eq('id', id);
+  }
+
+  Future<void> updateContactRequestNotes({
+    required String id,
+    String? notes,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('User not signed in');
+    }
+    await _client.from('contact_requests').update({
+      'notes': notes ?? '',
     }).eq('id', id);
   }
 
@@ -145,6 +158,7 @@ class FeedService {
       message: row['message']?.toString(),
       feedItemId: row['feed_item_id']?.toString(),
       feedItemTitle: feedItemTitle,
+      notes: row['notes']?.toString(),
     );
   }
 }
