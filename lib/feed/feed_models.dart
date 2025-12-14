@@ -44,6 +44,9 @@ class FeedCardData {
     this.tags = const [],
     this.reward,
     this.featured = false,
+    this.commentCount = 0,
+    this.likeCount = 0,
+    this.repostCount = 0,
   });
 
   final FeedCardType type;
@@ -56,4 +59,7 @@ class FeedCardData {
   final List<String> tags;
   final String? reward;
   final bool featured;
+  final int commentCount;
+  final int likeCount;
+  final int repostCount;
 }

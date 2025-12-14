@@ -178,11 +178,16 @@ class _StartupperAppState extends State<StartupperApp> {
           final args = ModalRoute.of(context)?.settings.arguments;
           String? id;
           FeedCardData? data;
+          bool focusComments = false;
           if (args is Map) {
             id = args['id']?.toString();
             final raw = args['data'];
             if (raw is FeedCardData) {
               data = raw;
+            }
+            final fc = args['focusComments'];
+            if (fc is bool) {
+              focusComments = fc;
             }
           }
           if (id == null) {
@@ -190,7 +195,11 @@ class _StartupperAppState extends State<StartupperApp> {
               body: Center(child: Text('Missing feed item id')),
             );
           }
-          return FeedItemScreen(id: id, initial: data);
+          return FeedItemScreen(
+            id: id,
+            initial: data,
+            focusComments: focusComments,
+          );
         },
       },
     );

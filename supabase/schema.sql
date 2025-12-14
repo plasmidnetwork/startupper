@@ -47,6 +47,8 @@ create table if not exists public.feed_items (
   user_id uuid references public.profiles(id) on delete cascade,
   type text check (type in ('update','highlight','mission','investor')),
   content jsonb not null,
+  like_count integer default 0,
+  repost_count integer default 0,
   created_at timestamptz default now()
 );
 

@@ -5,8 +5,6 @@ import 'contact_request_models.dart';
 import 'feed_service.dart';
 import 'feed_models.dart';
 import '../services/supabase_service.dart';
-import '../app_config.dart';
-import 'package:flutter/services.dart';
 
 class ContactRequestsScreen extends StatefulWidget {
   const ContactRequestsScreen({super.key, this.initialTab = 0});
@@ -50,22 +48,6 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
 
   Future<void> _loadAll() async {
     await Future.wait([_loadIncoming(), _loadOutgoing()]);
-  }
-
-  Future<void> _copyIntroLink({bool useWeb = false}) async {
-    final rawBase = useWeb && kFeedWebLinkBase.isNotEmpty
-        ? kFeedWebLinkBase
-        : kFeedLinkBase;
-    if (useWeb && kFeedWebLinkBase.isEmpty) {
-      showErrorSnackBar(
-          context, 'Web link base not set. Set FEED_WEB_LINK_BASE or copy app link.');
-    }
-    final base = rawBase.endsWith('/') ? rawBase : '$rawBase/';
-    final link = '${base}intros';
-    await Clipboard.setData(ClipboardData(text: link));
-    if (mounted) {
-      showSuccessSnackBar(context, 'Intros link copied');
-    }
   }
 
   Future<void> _loadIncoming() async {
@@ -251,25 +233,6 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Intros'),
-          actions: [
-            PopupMenuButton<String>(
-              tooltip: 'Copy intros link',
-              onSelected: (choice) {
-                _copyIntroLink(useWeb: choice == 'web');
-              },
-              itemBuilder: (context) => const [
-                PopupMenuItem(
-                  value: 'app',
-                  child: Text('Copy app link'),
-                ),
-                PopupMenuItem(
-                  value: 'web',
-                  child: Text('Copy web link'),
-                ),
-              ],
-              icon: const Icon(Icons.link),
-            ),
-          ],
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Incoming'),

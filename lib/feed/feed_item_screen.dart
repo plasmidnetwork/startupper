@@ -273,10 +273,16 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
                 ? const SizedBox.shrink()
                 : SingleChildScrollView(
                     padding: const EdgeInsets.all(16),
-                    child: Column(
+                      child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        FeedCard(data: _data!),
+                        FeedCard(
+                          data: _data!,
+                          onComment: () {
+                            _commentFocusNode.requestFocus();
+                          },
+                          // Comment count badge stays in sync with data snapshot
+                        ),
                         const SizedBox(height: 16),
                         _Actions(
                           data: _data!,
@@ -287,6 +293,19 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
                           onCopyLink: _copyLink,
                           copiedLink: _copiedLink,
                           introStatus: _introStatus,
+                        ),
+                        const SizedBox(height: 16),
+                        _CommentsSection(
+                          comments: _comments,
+                          loading: _commentsLoading,
+                          error: _commentsError,
+                          onRetry: _loadComments,
+                          onSubmit: _postComment,
+                          controller: _commentCtrl,
+                          focusNode: _commentFocusNode,
+                          posting: _postingComment,
+                          deleting: _deletingComment,
+                          onDelete: _deleteComment,
                         ),
                       ],
                     ),
@@ -419,30 +438,6 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
   }
 }
 
-String _chipLabel(ContactRequestStatus? status) {
-  switch (status) {
-    case ContactRequestStatus.accepted:
-      return 'Intro accepted';
-    case ContactRequestStatus.declined:
-      return 'Intro declined';
-    case ContactRequestStatus.pending:
-    case null:
-      return 'Intro sent';
-  }
-}
-
-Color _introChipColor(ContactRequestStatus? status, ThemeData theme) {
-  switch (status) {
-    case ContactRequestStatus.accepted:
-      return Colors.green.withValues(alpha: 0.14);
-    case ContactRequestStatus.declined:
-      return theme.colorScheme.error.withValues(alpha: 0.14);
-    case ContactRequestStatus.pending:
-    case null:
-      return theme.colorScheme.primary.withValues(alpha: 0.14);
-  }
-}
-
 class _Actions extends StatelessWidget {
   const _Actions({
     required this.data,
@@ -506,6 +501,219 @@ class _Actions extends StatelessWidget {
       ],
     );
   }
+}
+
+class _CommentsSection extends StatelessWidget {
+  const _CommentsSection({
+    required this.comments,
+    required this.loading,
+    required this.error,
+    required this.onRetry,
+    required this.onSubmit,
+    required this.controller,
+    required this.focusNode,
+    required this.posting,
+    required this.deleting,
+    required this.onDelete,
+  });
+
+  final List<FeedComment> comments;
+  final bool loading;
+  final String? error;
+  final Future<void> Function() onRetry;
+  final Future<void> Function() onSubmit;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool posting;
+  final Map<String, bool> deleting;
+  final void Function(FeedComment) onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Comments',
+              style:
+                  theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Reload comments',
+              onPressed: loading ? null : onRetry,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          focusNode: focusNode,
+          enabled: !posting,
+          onSubmitted: (_) => onSubmit(),
+          decoration: InputDecoration(
+            hintText: 'Add a comment...',
+            border: const OutlineInputBorder(),
+            suffixIcon: IconButton(
+              icon: posting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send),
+              onPressed: posting ? null : onSubmit,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (loading)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: CircularProgressIndicator(),
+            ),
+          )
+        else if (error != null)
+          Column(
+            children: [
+              Text(
+                error!,
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: onRetry,
+                child: const Text('Retry'),
+              ),
+            ],
+          )
+        else if (comments.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Be the first to comment.',
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: theme.colorScheme.outline),
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemBuilder: (context, index) {
+              final comment = comments[index];
+              final deletingComment = deleting[comment.id] == true;
+              final initial =
+                  comment.author.name.isNotEmpty ? comment.author.name[0].toUpperCase() : '?';
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundImage: (comment.author.avatarUrl != null &&
+                            comment.author.avatarUrl!.isNotEmpty)
+                        ? NetworkImage(comment.author.avatarUrl!)
+                        : null,
+                    child: (comment.author.avatarUrl == null ||
+                            comment.author.avatarUrl!.isEmpty)
+                        ? Text(
+                            initial,
+                            style: theme.textTheme.labelLarge
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                comment.author.name,
+                                style: theme.textTheme.labelLarge
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            Text(
+                              _timeAgo(comment.createdAt),
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: theme.colorScheme.outline),
+                            ),
+                            if (comment.isMine)
+                              IconButton(
+                                iconSize: 18,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                icon: deletingComment
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child:
+                                            CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.delete_outline, size: 18),
+                                onPressed:
+                                    deletingComment ? null : () => onDelete(comment),
+                                tooltip: 'Delete',
+                              ),
+                          ],
+                        ),
+                        Text(
+                          comment.body,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemCount: comments.length,
+          ),
+      ],
+    );
+  }
+}
+
+String _chipLabel(ContactRequestStatus? status) {
+  switch (status) {
+    case ContactRequestStatus.accepted:
+      return 'Intro accepted';
+    case ContactRequestStatus.declined:
+      return 'Intro declined';
+    case ContactRequestStatus.pending:
+    case null:
+      return 'Intro sent';
+  }
+}
+
+Color _introChipColor(ContactRequestStatus? status, ThemeData theme) {
+  switch (status) {
+    case ContactRequestStatus.accepted:
+      return Colors.green.withValues(alpha: 0.14);
+    case ContactRequestStatus.declined:
+      return theme.colorScheme.error.withValues(alpha: 0.14);
+    case ContactRequestStatus.pending:
+    case null:
+      return theme.colorScheme.primary.withValues(alpha: 0.14);
+  }
+}
+
+String _timeAgo(DateTime createdAt) {
+  final diff = DateTime.now().difference(createdAt);
+  if (diff.inMinutes < 1) return 'now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+  if (diff.inHours < 24) return '${diff.inHours}h';
+  return '${diff.inDays}d';
 }
 
 /// Returns an accent color based on the user's role.

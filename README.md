@@ -162,6 +162,7 @@ Optional extras:
    - Fetches from Supabase `feed_items` (no mock fallback)
    - Post action in AppBar (hidden when signed out); role auto-tagging on posts
    - Profile entry in AppBar to view your profile
+   - Comment threads per feed item (Supabase-backed), add/delete your comments, comment-focused deep links, and comment counts on feed cards
 
 8. **Startup Discovery** (`/startups`, `lib/startups/startup_discovery_screen.dart`)
    - Browse founder startups with avatars, stage chips, and pitches
@@ -233,6 +234,8 @@ dependencies:
 - See `supabase/schema.sql` for tables, indexes, and RLS policies (profiles, role details, feed_items).
 - Create a project in Supabase, copy `SUPABASE_URL` and `SUPABASE_ANON_KEY`, apply `supabase/schema.sql` via SQL editor or `supabase db push`, then run the app with the dart-defines above.
 - Intro requests: apply `supabase/migrations/2024-01-01_add_contact_requests.sql` (creates `contact_requests` with RLS allowing requester/target reads and requester inserts).
+- Comments: apply `supabase/migrations/2024-01-04_add_feed_comments.sql` (creates `feed_comments` with RLS for authenticated reads and owner inserts/deletes).
+- Engagement: apply `supabase/migrations/2024-01-05_add_feed_engagement_counts.sql` and `supabase/migrations/2024-01-06_add_feed_engagement_functions.sql` (adds like/repost counters and helper functions).
 
 ### Supabase Setup Checklist
 
@@ -341,6 +344,7 @@ FeedScreen
 - Feed detail fetches are cached in memory to reduce refetches when revisiting items.
 - Added copy-link shortcuts: feed screen and intros screen copy app/web deep links using FEED_LINK_BASE/FEED_WEB_LINK_BASE.
 - Feed cache clears on logout.
+- Feed comments: Supabase-backed threads per item with add/delete and comment-focused deep links.
 - Startup discovery screen: search + filters over founder_details with intro requests and link copy helpers.
 
 ## Platform Support

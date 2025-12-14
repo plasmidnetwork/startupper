@@ -25,7 +25,7 @@ class FeedRepository {
     try {
       final query = _client.from('feed_items').select(
           // Include avatar_url so we can display user profile images
-          'id, content, type, created_at, user:profiles(id, full_name, headline, role, avatar_url)');
+          'id, content, type, like_count, repost_count, created_at, user:profiles(id, full_name, headline, role, avatar_url), comments:feed_comments(count)');
 
       if (tags != null && tags.isNotEmpty) {
         query.contains('content->tags', tags);
@@ -92,6 +92,16 @@ class FeedRepository {
               value: m['value']?.toString() ?? '',
             ))
         .toList();
+    final commentsJson = (row['comments'] as List?)?.cast<Map>();
+    final commentCount = commentsJson != null && commentsJson.isNotEmpty
+        ? int.tryParse(commentsJson.first['count']?.toString() ?? '0') ?? 0
+        : 0;
+    final likeCount = row['like_count'] is int
+        ? row['like_count'] as int
+        : int.tryParse(row['like_count']?.toString() ?? '0') ?? 0;
+    final repostCount = row['repost_count'] is int
+        ? row['repost_count'] as int
+        : int.tryParse(row['repost_count']?.toString() ?? '0') ?? 0;
 
     final authorId = user['id']?.toString();
     final authorName = user['full_name']?.toString();
@@ -126,6 +136,9 @@ class FeedRepository {
       tags: tags,
       reward: content['reward']?.toString(),
       featured: (content['featured'] as bool?) ?? false,
+      commentCount: commentCount,
+      likeCount: likeCount,
+      repostCount: repostCount,
     );
   }
 
@@ -163,7 +176,7 @@ class FeedRepository {
       final rows = await _client
           .from('feed_items')
           .select(
-              'id, content, type, created_at, user:profiles(id, full_name, headline, role, avatar_url)')
+              'id, content, type, like_count, repost_count, created_at, user:profiles(id, full_name, headline, role, avatar_url), comments:feed_comments(count)')
           .eq('id', id)
           .limit(1);
       if (rows is List && rows.isNotEmpty) {

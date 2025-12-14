@@ -30,6 +30,10 @@ class _FeedScreenState extends State<FeedScreen> {
   List<FeedCardData> _items = [];
   final Set<String> _pendingIntroTargets = {};
   final Map<String, ContactRequestStatus> _introStatusByTarget = {};
+  final Set<String> _likedIds = {};
+  final Set<String> _repostedIds = {};
+  final Map<String, int> _likeOverrides = {};
+  final Map<String, int> _repostOverrides = {};
   bool _loading = true;
   bool _refreshing = false;
   bool _loadingMore = false;
@@ -462,11 +466,11 @@ class _FeedScreenState extends State<FeedScreen> {
     }
   }
 
-  void _openFeedDetail(FeedCardData data) {
+  void _openFeedDetail(FeedCardData data, {bool focusComments = false}) {
     Navigator.pushNamed(
       context,
       '/feed/item',
-      arguments: {'id': data.id, 'data': data},
+      arguments: {'id': data.id, 'data': data, 'focusComments': focusComments},
     );
   }
 
@@ -506,6 +510,73 @@ class _FeedScreenState extends State<FeedScreen> {
     });
     _savePrefs();
     _loadInitial();
+  }
+
+  void _handleLike(FeedCardData data) async {
+    final id = data.id;
+    if (id.isEmpty) return;
+    final currentlyLiked = _likedIds.contains(id);
+    final currentCount = _likeOverrides[id] ?? data.likeCount;
+    setState(() {
+      if (currentlyLiked) {
+        _likedIds.remove(id);
+        _likeOverrides[id] = currentCount > 0 ? currentCount - 1 : 0;
+      } else {
+        _likedIds.add(id);
+        _likeOverrides[id] = currentCount + 1;
+      }
+    });
+    try {
+      if (currentlyLiked) {
+        await _feedService.unlikeFeedItem(id);
+      } else {
+        await _feedService.likeFeedItem(id);
+      }
+    } catch (_) {
+      // Revert on failure
+      setState(() {
+        if (currentlyLiked) {
+          _likedIds.add(id);
+          _likeOverrides[id] = currentCount;
+        } else {
+          _likedIds.remove(id);
+          _likeOverrides[id] = currentCount;
+        }
+      });
+      if (mounted) {
+        showErrorSnackBar(context, 'Could not update like right now.');
+      }
+    }
+  }
+
+  void _handleRepost(FeedCardData data) async {
+    final id = data.id;
+    if (id.isEmpty) return;
+    if (_repostedIds.contains(id)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You already reposted this')),
+        );
+      }
+      return;
+    }
+    final currentCount = _repostOverrides[id] ?? data.repostCount;
+    setState(() {
+      _repostedIds.add(id);
+      _repostOverrides[id] = currentCount + 1;
+    });
+    try {
+      await _feedService.repostFeedItem(id);
+    } catch (_) {
+      // Revert
+      setState(() {
+        _repostedIds.remove(id);
+        _repostOverrides[id] = currentCount;
+      });
+      if (mounted) {
+        showErrorSnackBar(context, 'Could not repost right now.');
+      }
+    }
   }
 
   @override
@@ -754,6 +825,11 @@ class _FeedScreenState extends State<FeedScreen> {
                         final introStatus = item.author.id != null
                             ? _introStatusByTarget[item.author.id!]
                             : null;
+                        final likeCount =
+                            _likeOverrides[item.id] ?? item.likeCount;
+                        final repostCount =
+                            _repostOverrides[item.id] ?? item.repostCount;
+                        final isLiked = _likedIds.contains(item.id);
                         return Padding(
                           padding: EdgeInsets.fromLTRB(
                               16, index == 0 ? 16 : 12, 16, 4),
@@ -770,7 +846,14 @@ class _FeedScreenState extends State<FeedScreen> {
                             },
                             onAuthorTap: () => _openAuthorProfile(item.author),
                             onTap: () => _openFeedDetail(item),
+                            onComment: () =>
+                                _openFeedDetail(item, focusComments: true),
                             onIntroStatusTap: () => _openIntros(initialTab: 1),
+                            onLike: () => _handleLike(item),
+                            onRepost: () => _handleRepost(item),
+                            isLiked: isLiked,
+                            likeCountOverride: likeCount,
+                            repostCountOverride: repostCount,
                           ),
                         );
                       },
@@ -970,6 +1053,12 @@ class FeedCard extends StatelessWidget {
     this.onAuthorTap,
     this.onTap,
     this.onIntroStatusTap,
+    this.onComment,
+    this.onLike,
+    this.onRepost,
+    this.isLiked = false,
+    this.likeCountOverride,
+    this.repostCountOverride,
   }) : super(key: key);
 
   final FeedCardData data;
@@ -979,14 +1068,39 @@ class FeedCard extends StatelessWidget {
   final VoidCallback? onAuthorTap;
   final VoidCallback? onTap;
   final VoidCallback? onIntroStatusTap;
+  final VoidCallback? onComment;
+  final VoidCallback? onLike;
+  final VoidCallback? onRepost;
+  final bool isLiked;
+  final int? likeCountOverride;
+  final int? repostCountOverride;
 
   @override
   Widget build(BuildContext context) {
     switch (data.type) {
       case FeedCardType.highlight:
-        return _HighlightCard(data: data, onAuthorTap: onAuthorTap, onTap: onTap);
+        return _HighlightCard(
+          data: data,
+          onAuthorTap: onAuthorTap,
+          onTap: onTap,
+          onComment: onComment,
+          onLike: onLike,
+          onRepost: onRepost,
+          isLiked: isLiked,
+          likeCountOverride: likeCountOverride,
+          repostCountOverride: repostCountOverride,
+        );
       case FeedCardType.mission:
-        return _MissionCard(data: data, onAuthorTap: onAuthorTap, onTap: onTap);
+        return _MissionCard(
+          data: data,
+          onAuthorTap: onAuthorTap,
+          onTap: onTap,
+          onLike: onLike,
+          onRepost: onRepost,
+          isLiked: isLiked,
+          likeCountOverride: likeCountOverride,
+          repostCountOverride: repostCountOverride,
+        );
       case FeedCardType.investor:
         return _InvestorCard(
           data: data,
@@ -996,23 +1110,49 @@ class FeedCard extends StatelessWidget {
           onAuthorTap: onAuthorTap,
           onIntroStatusTap: onIntroStatusTap,
           onTap: onTap,
+          onComment: onComment,
+          onLike: onLike,
+          onRepost: onRepost,
+          isLiked: isLiked,
+          likeCountOverride: likeCountOverride,
+          repostCountOverride: repostCountOverride,
         );
       case FeedCardType.update:
-        return _UpdateCard(data: data, onAuthorTap: onAuthorTap, onTap: onTap);
+        return _UpdateCard(
+          data: data,
+          onAuthorTap: onAuthorTap,
+          onTap: onTap,
+          onComment: onComment,
+          onLike: onLike,
+          onRepost: onRepost,
+          isLiked: isLiked,
+          likeCountOverride: likeCountOverride,
+          repostCountOverride: repostCountOverride,
+        );
     }
   }
 }
 
 class _UpdateCard extends StatelessWidget {
-  const _UpdateCard({required this.data, this.onAuthorTap, this.onTap});
+  const _UpdateCard(
+      {required this.data, this.onAuthorTap, this.onTap, this.onComment, this.onLike, this.onRepost, this.isLiked = false, this.likeCountOverride, this.repostCountOverride});
 
   final FeedCardData data;
   final VoidCallback? onAuthorTap;
   final VoidCallback? onTap;
+  final VoidCallback? onComment;
+  final VoidCallback? onLike;
+  final VoidCallback? onRepost;
+  final bool isLiked;
+  final int? likeCountOverride;
+  final int? repostCountOverride;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final accent = _roleAccent(data.author.role, theme);
+    final likeCount = likeCountOverride ?? data.likeCount;
+    final repostCount = repostCountOverride ?? data.repostCount;
     final card = Card(
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -1022,11 +1162,12 @@ class _UpdateCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AvatarNameRow(author: data.author, onTap: onAuthorTap),
+            _PostHeader(author: data.author, onTap: onAuthorTap),
             const SizedBox(height: 12),
             Text(
               data.subtitle,
-              style: theme.textTheme.bodyMedium,
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(height: 1.4, fontSize: 15),
             ),
             if (data.metrics.isNotEmpty) ...[
               const SizedBox(height: 12),
@@ -1036,8 +1177,22 @@ class _UpdateCard extends StatelessWidget {
               const SizedBox(height: 8),
               _AskChip(label: data.ask!),
             ],
+            const SizedBox(height: 8),
+            _EngagementCounts(
+              likeCount: data.likeCount,
+              commentCount: data.commentCount,
+              repostCount: data.repostCount,
+              accent: accent,
+            ),
             const SizedBox(height: 12),
-            ActionBar(accent: _roleAccent(data.author.role, theme)),
+            ActionBar(
+              accent: accent,
+              onComment: onComment,
+              commentCount: data.commentCount,
+              onLike: onLike,
+              onRepost: onRepost,
+              isLiked: isLiked,
+            ),
           ],
         ),
       ),
@@ -1052,73 +1207,65 @@ class _UpdateCard extends StatelessWidget {
 }
 
 class _HighlightCard extends StatelessWidget {
-  const _HighlightCard({required this.data, this.onAuthorTap, this.onTap});
+  const _HighlightCard(
+      {required this.data, this.onAuthorTap, this.onTap, this.onComment, this.onLike, this.onRepost, this.isLiked = false, this.likeCountOverride, this.repostCountOverride});
 
   final FeedCardData data;
   final VoidCallback? onAuthorTap;
   final VoidCallback? onTap;
+  final VoidCallback? onComment;
+  final VoidCallback? onLike;
+  final VoidCallback? onRepost;
+  final bool isLiked;
+  final int? likeCountOverride;
+  final int? repostCountOverride;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = _roleAccent(data.author.role, theme);
+    final likeCount = likeCountOverride ?? data.likeCount;
+    final repostCount = repostCountOverride ?? data.repostCount;
 
     final card = Card(
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      clipBehavior: Clip.antiAlias,
       elevation: 3,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(minHeight: 96),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [accent.withValues(alpha: 0.18), accent.withValues(alpha: 0.05)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    data.title,
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    data.subtitle,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _PostHeader(author: data.author, onTap: onAuthorTap),
+                const SizedBox(height: 10),
+                Text(
+                  data.title,
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  data.subtitle,
+                  style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+                ),
+                if (data.tags.isNotEmpty) ...[
+                  const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: data.tags
                         .map((tag) => Chip(
-                              label: Text(tag),
+                              label: Text('#$tag'),
                               visualDensity: VisualDensity.compact,
-                              backgroundColor: Colors.white.withValues(alpha: 0.85),
+                              backgroundColor:
+                                  theme.colorScheme.surfaceContainerHighest,
                             ))
                         .toList(),
                   ),
                 ],
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AvatarNameRow(author: data.author, onTap: onAuthorTap),
                 if (data.ask != null) ...[
                   const SizedBox(height: 10),
                   _AskChip(label: data.ask!),
@@ -1128,7 +1275,21 @@ class _HighlightCard extends StatelessWidget {
                   MetricPills(metrics: data.metrics),
                 ],
                 const SizedBox(height: 10),
-                ActionBar(accent: accent),
+                _EngagementCounts(
+                  likeCount: likeCount,
+                  commentCount: data.commentCount,
+                  repostCount: repostCount,
+                  accent: accent,
+                ),
+                const SizedBox(height: 10),
+                ActionBar(
+                  accent: accent,
+                  onComment: onComment,
+                  commentCount: data.commentCount,
+                  onLike: onLike,
+                  onRepost: onRepost,
+                  isLiked: isLiked,
+                ),
               ],
             ),
           ),
@@ -1145,16 +1306,32 @@ class _HighlightCard extends StatelessWidget {
 }
 
 class _MissionCard extends StatelessWidget {
-  const _MissionCard({required this.data, this.onAuthorTap, this.onTap});
+  const _MissionCard({
+    required this.data,
+    this.onAuthorTap,
+    this.onTap,
+    this.onLike,
+    this.onRepost,
+    this.isLiked = false,
+    this.likeCountOverride,
+    this.repostCountOverride,
+  });
 
   final FeedCardData data;
   final VoidCallback? onAuthorTap;
   final VoidCallback? onTap;
+  final VoidCallback? onLike;
+  final VoidCallback? onRepost;
+  final bool isLiked;
+  final int? likeCountOverride;
+  final int? repostCountOverride;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = _roleAccent(data.author.role, theme);
+    final likeCount = likeCountOverride ?? data.likeCount;
+    final repostCount = repostCountOverride ?? data.repostCount;
 
     final card = Card(
       margin: EdgeInsets.zero,
@@ -1165,26 +1342,7 @@ class _MissionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(child: AvatarNameRow(author: data.author, onTap: onAuthorTap)),
-                if (data.reward != null)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      data.reward!,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                          color: accent, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-              ],
-            ),
+            _PostHeader(author: data.author, onTap: onAuthorTap),
             const SizedBox(height: 10),
             Text(
               data.title,
@@ -1212,6 +1370,13 @@ class _MissionCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 12),
+            _EngagementCounts(
+              likeCount: likeCount,
+              commentCount: data.commentCount,
+              repostCount: repostCount,
+              accent: accent,
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -1242,6 +1407,15 @@ class _MissionCard extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 10),
+            ActionBar(
+              accent: accent,
+              onComment: null,
+              commentCount: data.commentCount,
+              onLike: onLike,
+              onRepost: onRepost,
+              isLiked: isLiked,
+            ),
           ],
         ),
       ),
@@ -1264,6 +1438,12 @@ class _InvestorCard extends StatefulWidget {
     this.onAuthorTap,
     this.onTap,
     this.onIntroStatusTap,
+    this.onComment,
+    this.onLike,
+    this.onRepost,
+    this.isLiked = false,
+    this.likeCountOverride,
+    this.repostCountOverride,
   });
 
   final FeedCardData data;
@@ -1273,6 +1453,12 @@ class _InvestorCard extends StatefulWidget {
   final VoidCallback? onAuthorTap;
   final VoidCallback? onTap;
   final VoidCallback? onIntroStatusTap;
+  final VoidCallback? onComment;
+  final VoidCallback? onLike;
+  final VoidCallback? onRepost;
+  final bool isLiked;
+  final int? likeCountOverride;
+  final int? repostCountOverride;
 
   @override
   State<_InvestorCard> createState() => _InvestorCardState();
@@ -1338,6 +1524,8 @@ class _InvestorCardState extends State<_InvestorCard> {
     final data = widget.data;
     final accent = _roleAccent(data.author.role, theme);
     final disabled = _requesting || _introSent || widget.introPending;
+    final likeCount = widget.likeCountOverride ?? data.likeCount;
+    final repostCount = widget.repostCountOverride ?? data.repostCount;
 
     final card = Card(
       margin: EdgeInsets.zero,
@@ -1348,7 +1536,7 @@ class _InvestorCardState extends State<_InvestorCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AvatarNameRow(author: data.author, onTap: widget.onAuthorTap),
+            _PostHeader(author: data.author, onTap: widget.onAuthorTap),
             if (widget.introPending || _introSent || widget.introStatus != null) ...[
               const SizedBox(height: 8),
               InkWell(
@@ -1392,15 +1580,16 @@ class _InvestorCardState extends State<_InvestorCard> {
               _AskChip(label: data.ask!),
             ],
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              alignment: WrapAlignment.start,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            _EngagementCounts(
+              likeCount: likeCount,
+              commentCount: data.commentCount,
+              repostCount: repostCount,
+              accent: accent,
+            ),
+            const SizedBox(height: 10),
+            Row(
               children: [
-                Tooltip(
-                  message:
-                      disabled ? 'You already sent an intro to this member' : '',
+                Expanded(
                   child: ElevatedButton(
                     onPressed: disabled ? null : _handleRequestIntro,
                     style: ElevatedButton.styleFrom(
@@ -1418,6 +1607,7 @@ class _InvestorCardState extends State<_InvestorCard> {
                         : Text(disabled ? 'Intro sent' : 'Request intro'),
                   ),
                 ),
+                const SizedBox(width: 12),
                 OutlinedButton(
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -1430,9 +1620,18 @@ class _InvestorCardState extends State<_InvestorCard> {
                       vertical: 12,
                     ),
                   ),
-                  child: const Text('Share one-pager'),
+                  child: const Text('Share'),
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+            ActionBar(
+              accent: accent,
+              onComment: widget.onComment,
+              commentCount: data.commentCount,
+              onLike: widget.onLike,
+              onRepost: widget.onRepost,
+              isLiked: widget.isLiked,
             ),
           ],
         ),
@@ -1507,6 +1706,77 @@ class AvatarNameRow extends StatelessWidget {
   }
 }
 
+class _PostHeader extends StatelessWidget {
+  const _PostHeader({required this.author, this.onTap});
+
+  final FeedAuthor author;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = _roleAccent(author.role, theme);
+    final initial = author.name.isNotEmpty ? author.name[0].toUpperCase() : '?';
+    final subtitle = [
+      if (author.affiliation.isNotEmpty) author.affiliation,
+      if (author.timeAgo.isNotEmpty) author.timeAgo,
+    ].join(' · ');
+
+    final row = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          radius: 20,
+          backgroundColor: accent.withValues(alpha: 0.12),
+          backgroundImage:
+              (author.avatarUrl != null && author.avatarUrl!.isNotEmpty)
+                  ? NetworkImage(author.avatarUrl!)
+                  : null,
+          child: (author.avatarUrl == null || author.avatarUrl!.isEmpty)
+              ? Text(
+                  initial,
+                  style: TextStyle(
+                    color: accent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                )
+              : null,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                author.name,
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.outline),
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.more_horiz),
+          tooltip: 'More',
+          onPressed: () {},
+        ),
+      ],
+    );
+
+    if (onTap == null) return row;
+    return InkWell(
+      onTap: onTap,
+      child: row,
+    );
+  }
+}
+
 class MetricPills extends StatelessWidget {
   const MetricPills({Key? key, required this.metrics}) : super(key: key);
 
@@ -1553,46 +1823,147 @@ class MetricPills extends StatelessWidget {
 }
 
 class ActionBar extends StatelessWidget {
-  const ActionBar({Key? key, required this.accent}) : super(key: key);
+  const ActionBar({
+    Key? key,
+    required this.accent,
+    this.onComment,
+    this.commentCount,
+    this.onLike,
+    this.onRepost,
+    this.isLiked = false,
+  }) : super(key: key);
 
+  final Color accent;
+  final VoidCallback? onComment;
+  final int? commentCount;
+  final VoidCallback? onLike;
+  final VoidCallback? onRepost;
+  final bool isLiked;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: [
+        _ActionButton(
+          icon: Icons.thumb_up_off_alt_outlined,
+          label: isLiked ? 'Liked' : 'Like',
+          accent: accent,
+          onTap: onLike,
+        ),
+        _ActionButton(
+          icon: Icons.chat_bubble_outline,
+          label: commentCount != null ? 'Comment · ${commentCount!}' : 'Comment',
+          accent: accent,
+          onTap: () {
+            if (onComment != null) {
+              onComment!();
+              return;
+            }
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Comments coming soon')),
+            );
+          },
+        ),
+        _ActionButton(
+          icon: Icons.repeat,
+          label: 'Repost',
+          accent: accent,
+          onTap: onRepost,
+        ),
+        _ActionButton(
+          icon: Icons.send_outlined,
+          label: 'Send',
+          accent: accent,
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Shared via message')),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.accent,
+    this.onTap,
+    this.filled = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color accent;
+  final VoidCallback? onTap;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return TextButton.icon(
+      onPressed: onTap,
+      icon: Icon(
+        icon,
+        size: 18,
+        color: filled ? accent : accent.withValues(alpha: 0.9),
+      ),
+      label: Text(
+        label,
+        style: theme.textTheme.labelLarge
+            ?.copyWith(color: filled ? accent : accent.withValues(alpha: 0.9)),
+      ),
+    );
+  }
+}
+
+class _EngagementCounts extends StatelessWidget {
+  const _EngagementCounts({
+    required this.likeCount,
+    required this.commentCount,
+    required this.repostCount,
+    required this.accent,
+  });
+
+  final int likeCount;
+  final int commentCount;
+  final int repostCount;
   final Color accent;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Wrap(
-      spacing: 6,
-      runSpacing: 4,
+      spacing: 12,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        TextButton.icon(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('You applauded this update')),
-            );
-          },
-          icon: const Icon(Icons.emoji_events_outlined, size: 18),
-          label: const Text('Applaud'),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.thumb_up_alt, size: 16, color: accent),
+            const SizedBox(width: 6),
+            Text(
+              likeCount.toString(),
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: theme.colorScheme.onSurface),
+            ),
+          ],
         ),
-        TextButton.icon(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Comments coming soon')),
-            );
-          },
-          icon: const Icon(Icons.chat_bubble_outline, size: 18),
-          label: const Text('Comment'),
+        Text(
+          '${commentCount.toString()} comments',
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: theme.colorScheme.onSurface),
         ),
-        TextButton(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Interest sent!')),
-            );
-          },
-          child: Text(
-            'Signal interest',
-            style: theme.textTheme.labelLarge
-                ?.copyWith(color: accent, fontWeight: FontWeight.w700),
-          ),
+        Text(
+          '${repostCount.toString()} reposts',
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: theme.colorScheme.onSurface),
         ),
       ],
     );
