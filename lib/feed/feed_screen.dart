@@ -8,6 +8,8 @@ import 'feed_service.dart';
 import '../theme/snackbar.dart';
 import '../theme/loading_overlay.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
+import '../app_config.dart';
 import 'contact_request_models.dart';
 
 class FeedScreen extends StatefulWidget {
@@ -472,6 +474,21 @@ class _FeedScreenState extends State<FeedScreen> {
     Navigator.pushNamed(context, '/intros', arguments: {'initialTab': initialTab});
   }
 
+  Future<void> _copyFeedLink({bool useWeb = false}) async {
+    final rawBase = useWeb && kFeedWebLinkBase.isNotEmpty
+        ? kFeedWebLinkBase
+        : kFeedLinkBase;
+    if (useWeb && kFeedWebLinkBase.isEmpty) {
+      showErrorSnackBar(
+          context, 'Web link base not set. Set FEED_WEB_LINK_BASE or copy app link.');
+    }
+    final base = rawBase.endsWith('/') ? rawBase : '$rawBase/';
+    final link = base;
+    await Clipboard.setData(ClipboardData(text: link));
+    if (!mounted) return;
+    showSuccessSnackBar(context, 'Feed link copied');
+  }
+
   void _applySearch(String term) {
     final trimmed = term.trim();
     setState(() {
@@ -541,6 +558,23 @@ class _FeedScreenState extends State<FeedScreen> {
               Navigator.pushNamed(context, '/profile');
             },
           ),
+          PopupMenuButton<String>(
+            tooltip: 'Copy feed link',
+            onSelected: (choice) {
+              _copyFeedLink(useWeb: choice == 'web');
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'app',
+                child: Text('Copy app link'),
+              ),
+              const PopupMenuItem(
+                value: 'web',
+                child: Text('Copy web link'),
+              ),
+            ],
+            icon: const Icon(Icons.link),
+          ),
           IconButton(
             icon: const Icon(Icons.mail_outline),
             tooltip: 'Intros',
@@ -558,6 +592,7 @@ class _FeedScreenState extends State<FeedScreen> {
             icon: const Icon(Icons.logout),
             tooltip: 'Log out',
             onPressed: () async {
+              _repo.clearCache();
               await Supabase.instance.client.auth.signOut();
               if (!mounted) return;
               Navigator.pushNamedAndRemoveUntil(
@@ -1350,7 +1385,11 @@ class _InvestorCardState extends State<_InvestorCard> {
               _AskChip(label: data.ask!),
             ],
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              alignment: WrapAlignment.start,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Tooltip(
                   message:
@@ -1372,7 +1411,6 @@ class _InvestorCardState extends State<_InvestorCard> {
                         : Text(disabled ? 'Intro sent' : 'Request intro'),
                   ),
                 ),
-                const SizedBox(width: 12),
                 OutlinedButton(
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(

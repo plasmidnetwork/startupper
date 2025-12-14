@@ -251,10 +251,11 @@ dependencies:
      --dart-define=SUPABASE_URL=<your-project-url> \
      --dart-define=SUPABASE_ANON_KEY=<your-anon-key> \
      -d <device>
-   ```
-   Optional:
+  ```
+  Optional:
    - `--dart-define=SUPABASE_EMAIL_REDIRECT=<redirect-url>` for email verification
    - `--dart-define=BYPASS_VALIDATION=true` for testing
+   - `--dart-define=FEED_LINK_BASE=startupper://feed/` (or https://yourdomain/feed/) for feed deep links
 
 ## Architecture
 
@@ -330,7 +331,12 @@ FeedScreen
 - Feed-item detail includes profile opener and intro action (for investor items); investor cards link to sent intros.
 - Intro inbox has status filters (pending/accepted/declined) and richer author sheets.
 - Intro requests now support participant-visible notes that can be added/edited from the inbox.
-- Feed-item detail has a copy-link action (deep link: startupper://feed/{id}).
+- Feed-item detail has a copy-link action; configurable deep-link base via FEED_LINK_BASE (app or web).
+- Investor cards now show intro status chips; tapping opens the intros screen.
+- Feed detail fetches are cached in memory to reduce refetches when revisiting items.
+- Feed cache clears on logout.
+- Added copy-link shortcuts: feed screen and intros screen copy app/web deep links using FEED_LINK_BASE/FEED_WEB_LINK_BASE.
+- Feed cache clears on logout.
 
 ## Platform Support
 

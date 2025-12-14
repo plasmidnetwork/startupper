@@ -6,6 +6,8 @@ import '../theme/loading_overlay.dart';
 import '../theme/snackbar.dart';
 import 'feed_service.dart';
 import 'package:flutter/services.dart';
+import '../app_config.dart';
+import 'contact_request_models.dart';
 
 class FeedItemScreen extends StatefulWidget {
   const FeedItemScreen({
@@ -29,7 +31,9 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
   String? _error;
   bool _sendingIntro = false;
   bool _introSent = false;
+  ContactRequestStatus? _introStatus;
   String? _copiedLink;
+  ContactRequest? _introRequest;
 
   @override
   void initState() {
@@ -37,6 +41,7 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
     _data = widget.initial;
     if (_data != null) {
       _loading = false;
+      _loadIntroStatus();
     } else {
       _fetch();
     }
@@ -57,12 +62,35 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
           _error = 'This feed item is not available.';
         }
       });
+      if (item != null) {
+        _loadIntroStatus();
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _error = 'Could not load this feed item.';
       });
+    }
+  }
+
+  Future<void> _loadIntroStatus() async {
+    final authorId = _data?.author.id;
+    if (authorId == null || authorId.isEmpty) return;
+    try {
+      final sent = await _service.fetchContactRequests(outgoing: true);
+      if (!mounted) return;
+      final matchList = sent.where((r) => r.target.id == authorId).toList();
+      if (matchList.isNotEmpty) {
+        final match = matchList.first;
+        setState(() {
+          _introStatus = match.status;
+          _introRequest = match;
+          _introSent = match.status != ContactRequestStatus.declined;
+        });
+      }
+    } catch (_) {
+      // ignore
     }
   }
 
@@ -86,10 +114,22 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
                   arguments: {'initialTab': 1});
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.link),
+          PopupMenuButton<String>(
             tooltip: 'Copy link',
-            onPressed: _copyLink,
+            onSelected: (choice) {
+              _copyLink(choice == 'web');
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'app',
+                child: Text('Copy app link'),
+              ),
+              const PopupMenuItem(
+                value: 'web',
+                child: Text('Copy web link'),
+              ),
+            ],
+            icon: const Icon(Icons.link),
           ),
         ],
       ),
@@ -136,6 +176,7 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
                           onOpenProfile: _openProfileSheet,
                           onCopyLink: _copyLink,
                           copiedLink: _copiedLink,
+                          introStatus: _introStatus,
                         ),
                       ],
                     ),
@@ -246,8 +287,18 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
     );
   }
 
-  Future<void> _copyLink() async {
-    final link = 'startupper://feed/${widget.id}';
+  Future<void> _copyLink([bool useWeb = false]) async {
+    final rawBase = useWeb && kFeedWebLinkBase.isNotEmpty
+        ? kFeedWebLinkBase
+        : kFeedLinkBase;
+    if (useWeb && kFeedWebLinkBase.isEmpty && mounted) {
+      showErrorSnackBar(
+        context,
+        'Web link base not set. Set FEED_WEB_LINK_BASE or copy app link instead.',
+      );
+    }
+    final base = rawBase.endsWith('/') ? rawBase : '$rawBase/';
+    final link = '$base${widget.id}';
     await Clipboard.setData(ClipboardData(text: link));
     if (mounted) {
       setState(() {
@@ -255,6 +306,30 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
       });
       showSuccessSnackBar(context, 'Link copied');
     }
+  }
+}
+
+String _chipLabel(ContactRequestStatus? status) {
+  switch (status) {
+    case ContactRequestStatus.accepted:
+      return 'Intro accepted';
+    case ContactRequestStatus.declined:
+      return 'Intro declined';
+    case ContactRequestStatus.pending:
+    case null:
+      return 'Intro sent';
+  }
+}
+
+Color _introChipColor(ContactRequestStatus? status, ThemeData theme) {
+  switch (status) {
+    case ContactRequestStatus.accepted:
+      return Colors.green.withValues(alpha: 0.14);
+    case ContactRequestStatus.declined:
+      return theme.colorScheme.error.withValues(alpha: 0.14);
+    case ContactRequestStatus.pending:
+    case null:
+      return theme.colorScheme.primary.withValues(alpha: 0.14);
   }
 }
 
@@ -267,6 +342,8 @@ class _Actions extends StatelessWidget {
     required this.onOpenProfile,
     required this.onCopyLink,
     this.copiedLink,
+    this.introStatus,
+    this.introRequest,
   });
 
   final FeedCardData data;
@@ -276,12 +353,15 @@ class _Actions extends StatelessWidget {
   final VoidCallback onOpenProfile;
   final VoidCallback onCopyLink;
   final String? copiedLink;
+  final ContactRequestStatus? introStatus;
+  final ContactRequest? introRequest;
 
   @override
   Widget build(BuildContext context) {
     final isInvestor = data.type == FeedCardType.investor;
     final canIntro =
         isInvestor && data.author.id != null && data.author.id!.isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -291,23 +371,28 @@ class _Actions extends StatelessWidget {
         ),
         if (canIntro) ...[
           const SizedBox(height: 8),
-          ElevatedButton(
-            onPressed: (introSent || sendingIntro) ? null : onRequestIntro,
-            child: sendingIntro
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(introSent ? 'Intro sent' : 'Request intro'),
-          ),
+          if (introSent)
+            Tooltip(
+              message: _chipLabel(introStatus),
+              child: Chip(
+                label: Text(_chipLabel(introStatus)),
+                visualDensity: VisualDensity.compact,
+                backgroundColor:
+                    _introChipColor(introStatus, Theme.of(context)),
+              ),
+            )
+          else
+            ElevatedButton(
+              onPressed: sendingIntro ? null : onRequestIntro,
+              child: sendingIntro
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Request intro'),
+            ),
         ],
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: onCopyLink,
-          icon: const Icon(Icons.link),
-          label: Text(copiedLink != null ? 'Link copied' : 'Copy link'),
-        ),
       ],
     );
   }
