@@ -558,6 +558,13 @@ class _FeedScreenState extends State<FeedScreen> {
               Navigator.pushNamed(context, '/profile');
             },
           ),
+          IconButton(
+            icon: const Icon(Icons.apartment_outlined),
+            tooltip: 'Startups',
+            onPressed: () {
+              Navigator.pushNamed(context, '/startups');
+            },
+          ),
           PopupMenuButton<String>(
             tooltip: 'Copy feed link',
             onSelected: (choice) {

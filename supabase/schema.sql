@@ -50,11 +50,21 @@ create table if not exists public.feed_items (
   created_at timestamptz default now()
 );
 
+create table if not exists public.feed_comments (
+  id uuid primary key default gen_random_uuid(),
+  feed_item_id uuid references public.feed_items(id) on delete cascade,
+  user_id uuid references public.profiles(id) on delete cascade,
+  body text not null,
+  created_at timestamptz default now()
+);
+
 -- Indexes
 create index if not exists idx_feed_items_created_at on public.feed_items (created_at desc);
 create index if not exists idx_feed_items_type on public.feed_items (type);
 create index if not exists idx_feed_items_user on public.feed_items (user_id);
 create index if not exists feed_items_featured_idx on public.feed_items ((content->>'featured')) where (content->>'featured')::boolean = true;
+create index if not exists idx_feed_comments_item on public.feed_comments (feed_item_id, created_at);
+create index if not exists idx_feed_comments_user on public.feed_comments (user_id);
 
 -- Enable RLS
 alter table public.profiles enable row level security;
@@ -62,6 +72,7 @@ alter table public.founder_details enable row level security;
 alter table public.investor_details enable row level security;
 alter table public.enduser_details enable row level security;
 alter table public.feed_items enable row level security;
+alter table public.feed_comments enable row level security;
 
 -- RLS policies (drop existing first to avoid conflicts)
 drop policy if exists "Profiles are viewable by authenticated" on public.profiles;
@@ -73,6 +84,9 @@ drop policy if exists "Feed readable by authenticated" on public.feed_items;
 drop policy if exists "Feed writes by owner" on public.feed_items;
 drop policy if exists "Feed updates by owner" on public.feed_items;
 drop policy if exists "Feed deletes by owner" on public.feed_items;
+drop policy if exists "Feed comments readable by authenticated" on public.feed_comments;
+drop policy if exists "Feed comments insert by owner" on public.feed_comments;
+drop policy if exists "Feed comments delete by owner" on public.feed_comments;
 
 create policy "Profiles are viewable by authenticated" on public.profiles
   for select using (auth.role() = 'authenticated');
@@ -93,6 +107,12 @@ create policy "Feed writes by owner" on public.feed_items
 create policy "Feed updates by owner" on public.feed_items
   for update using (auth.uid() = user_id);
 create policy "Feed deletes by owner" on public.feed_items
+  for delete using (auth.uid() = user_id);
+create policy "Feed comments readable by authenticated" on public.feed_comments
+  for select using (auth.role() = 'authenticated');
+create policy "Feed comments insert by owner" on public.feed_comments
+  for insert with check (auth.uid() = user_id);
+create policy "Feed comments delete by owner" on public.feed_comments
   for delete using (auth.uid() = user_id);
 
 -- Storage policies for avatars bucket (create the bucket named 'avatars' in Storage UI)

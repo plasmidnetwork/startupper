@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_models.dart';
 import 'contact_request_models.dart';
+import 'comment_models.dart';
 
 class FeedService {
   final SupabaseClient _client = Supabase.instance.client;
@@ -115,6 +116,58 @@ class FeedService {
     }).eq('id', id);
   }
 
+  Future<List<FeedComment>> fetchComments(String feedItemId) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('User not signed in');
+    }
+
+    final rows = await _client
+        .from('feed_comments')
+        .select(
+            'id, body, created_at, feed_item_id, user:profiles(id, full_name, avatar_url)')
+        .eq('feed_item_id', feedItemId)
+        .order('created_at', ascending: true);
+
+    return rows
+        .whereType<Map<String, dynamic>>()
+        .map((row) => _mapComment(row, userId))
+        .whereType<FeedComment>()
+        .toList();
+  }
+
+  Future<void> addComment({
+    required String feedItemId,
+    required String body,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('User not signed in');
+    }
+    final trimmed = body.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('Comment cannot be empty');
+    }
+
+    await _client.from('feed_comments').insert({
+      'feed_item_id': feedItemId,
+      'user_id': userId,
+      'body': trimmed,
+    });
+  }
+
+  Future<void> deleteComment(String id) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('User not signed in');
+    }
+    await _client
+        .from('feed_comments')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+  }
+
   ContactRequest? _mapContactRequest(Map<String, dynamic> row) {
     final requesterJson = row['requester'] as Map?;
     final targetJson = row['target'] as Map?;
@@ -159,6 +212,27 @@ class FeedService {
       feedItemId: row['feed_item_id']?.toString(),
       feedItemTitle: feedItemTitle,
       notes: row['notes']?.toString(),
+    );
+  }
+
+  FeedComment? _mapComment(Map<String, dynamic> row, String currentUserId) {
+    final userJson = row['user'] as Map?;
+    if (userJson == null) return null;
+    final createdAtStr = row['created_at']?.toString();
+    final createdAt = DateTime.tryParse(createdAtStr ?? '') ?? DateTime.now();
+    final authorId = userJson['id']?.toString() ?? '';
+
+    return FeedComment(
+      id: row['id']?.toString() ?? '',
+      feedItemId: row['feed_item_id']?.toString() ?? '',
+      body: row['body']?.toString() ?? '',
+      createdAt: createdAt,
+      author: FeedCommentAuthor(
+        id: authorId,
+        name: userJson['full_name']?.toString() ?? 'Member',
+        avatarUrl: userJson['avatar_url']?.toString(),
+      ),
+      isMine: authorId == currentUserId,
     );
   }
 }

@@ -108,7 +108,7 @@ Optional extras:
 
 ### 🎨 Complete Onboarding Flow
 
-**7 screens with polished UI:**
+**8 screens with polished UI:**
 
 1. **Auth Screen** (`/auth`)
    - Email and password fields
@@ -162,6 +162,11 @@ Optional extras:
    - Fetches from Supabase `feed_items` (no mock fallback)
    - Post action in AppBar (hidden when signed out); role auto-tagging on posts
    - Profile entry in AppBar to view your profile
+
+8. **Startup Discovery** (`/startups`, `lib/startups/startup_discovery_screen.dart`)
+   - Browse founder startups with avatars, stage chips, and pitches
+   - Search by name or pitch, filter by stage and what they’re looking for, with pagination
+   - Request intros directly from cards or detail sheets; copy website/demo links
 
 ### ✨ Key Features
 
@@ -297,12 +302,12 @@ FeedScreen
 - [x] Session-aware routing to skip onboarding when profile/role exists
 
 ### Feature Development
-- [ ] Build out the feed screen with real content (Supabase or API)
-- [ ] Implement startup discovery and browsing
-- [ ] Add user profile viewing and editing
+- [x] Build out the feed screen with real content (Supabase or API)
+- [x] Implement startup discovery and browsing
+- [x] Add user profile viewing and editing
 - [ ] Create founder-investor matching
 - [ ] Add messaging/communication features
-- [ ] Implement search and filtering
+- [x] Implement search and filtering
 
 ### Polish & Optimization
 - [ ] Add app icons and splash screens
@@ -334,9 +339,9 @@ FeedScreen
 - Feed-item detail has a copy-link action; configurable deep-link base via FEED_LINK_BASE (app or web).
 - Investor cards now show intro status chips; tapping opens the intros screen.
 - Feed detail fetches are cached in memory to reduce refetches when revisiting items.
-- Feed cache clears on logout.
 - Added copy-link shortcuts: feed screen and intros screen copy app/web deep links using FEED_LINK_BASE/FEED_WEB_LINK_BASE.
 - Feed cache clears on logout.
+- Startup discovery screen: search + filters over founder_details with intro requests and link copy helpers.
 
 ## Platform Support
 

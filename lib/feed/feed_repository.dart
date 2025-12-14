@@ -13,6 +13,7 @@ class FeedPage {
 
 class FeedRepository {
   final _client = Supabase.instance.client;
+  final Map<String, FeedCardData> _cache = {};
 
   Future<FeedPage> fetchFeed({
     int offset = 0,
@@ -157,6 +158,7 @@ class FeedRepository {
   }
 
   Future<FeedCardData?> fetchById(String id) async {
+    if (_cache.containsKey(id)) return _cache[id];
     try {
       final rows = await _client
           .from('feed_items')
@@ -165,13 +167,17 @@ class FeedRepository {
           .eq('id', id)
           .limit(1);
       if (rows is List && rows.isNotEmpty) {
-        return _mapRow(rows.first as Map<String, dynamic>);
+        final mapped = _mapRow(rows.first as Map<String, dynamic>);
+        if (mapped != null) _cache[id] = mapped;
+        return mapped;
       }
       return null;
     } catch (_) {
       rethrow;
     }
   }
+
+  void clearCache() => _cache.clear();
 }
 
 // ignore: unused_element

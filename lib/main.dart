@@ -15,6 +15,7 @@ import 'profile/profile_screen.dart';
 import 'feed/contact_requests_screen.dart';
 import 'feed/feed_item_screen.dart';
 import 'feed/feed_models.dart';
+import 'startups/startup_discovery_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -163,6 +164,7 @@ class _StartupperAppState extends State<StartupperApp> {
         '/onboarding/investor': (context) => const InvestorOnboardingScreen(),
         '/onboarding/end_user': (context) => const EndUserOnboardingScreen(),
         '/feed': (context) => const FeedScreen(),
+        '/startups': (context) => const StartupDiscoveryScreen(),
         '/profile': (context) => const ProfileScreen(),
         '/intros': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
