@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../app_config.dart';
 import '../services/supabase_service.dart';
 import '../theme/spacing.dart';
+import 'onboarding_progress.dart';
+import '../theme/snackbar.dart';
+import '../theme/loading_overlay.dart';
 
 class InvestorOnboardingScreen extends StatefulWidget {
   const InvestorOnboardingScreen({Key? key}) : super(key: key);
@@ -52,7 +55,8 @@ class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
       final selectedStage = _stagesInterested.values.any((v) => v);
       if (!selectedStage) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Select at least one stage')),
+          const SnackBar(
+              content: Text('Pick at least one stage you invest in.')),
         );
         return;
       }
@@ -79,8 +83,10 @@ class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
       Navigator.pushReplacementNamed(context, '/feed');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save investor details: $e')),
+      showErrorSnackBar(
+        context,
+        'Could not save your investor details. Check your connection and try again.',
+        onRetry: _saving ? null : _saveInvestor,
       );
       setState(() => _saving = false);
     }
@@ -96,119 +102,133 @@ class _InvestorOnboardingScreenState extends State<InvestorOnboardingScreen> {
         ),
         title: const Text('Investor Details'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Tell us about your investment focus',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+      body: LoadingOverlay(
+        isLoading: _saving,
+        message: 'Saving your details...',
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                OnboardingProgress(
+                  currentStep: 3,
+                  totalSteps: 3,
+                  label: _saving ? 'Saving your details...' : 'Investor details',
                 ),
-              ),
-              const SizedBox(height: gapLG),
-              DropdownButtonFormField<String>(
-                initialValue: _investorType,
-                decoration: const InputDecoration(
-                  labelText: 'Investor Type *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.account_balance),
-                ),
-                items: _investorTypes
-                    .map((type) => DropdownMenuItem(
-                          value: type,
-                          child: Text(type),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _investorType = value;
-                    });
-                  }
-                },
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Select an investor type';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: gapMD),
-              TextFormField(
-                controller: _ticketSizeController,
-                decoration: const InputDecoration(
-                  labelText: 'Typical Ticket Size *',
-                  hintText: 'e.g., \$25K - \$100K',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.monetization_on),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Ticket size is required';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: gapLG),
-              const Text(
-                'Stages interested in',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: gapSM),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _stagesInterested.keys.map((stage) {
-                  return FilterChip(
-                    label: Text(stage),
-                    selected: _stagesInterested[stage]!,
-                    onSelected: (selected) {
-                      setState(() {
-                        _stagesInterested[stage] = selected;
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: gapXL),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _saving ? null : _handleBack,
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: const Text('Back'),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _saving ? null : _handleFinish,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: _saving
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Finish'),
-                    ),
-                  ),
+                if (_saving) ...[
+                  const SizedBox(height: gapSM),
+                  const LinearProgressIndicator(minHeight: 4),
                 ],
-              ),
-            ],
+                const SizedBox(height: gapLG),
+                const Text(
+                  'Tell us about your investment focus',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: gapLG),
+                DropdownButtonFormField<String>(
+                  initialValue: _investorType,
+                  decoration: const InputDecoration(
+                    labelText: 'Investor Type *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.account_balance),
+                  ),
+                  items: _investorTypes
+                      .map((type) => DropdownMenuItem(
+                            value: type,
+                            child: Text(type),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _investorType = value;
+                      });
+                    }
+                  },
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Select your investor type.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: gapMD),
+                TextFormField(
+                  controller: _ticketSizeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Typical Ticket Size *',
+                    hintText: 'e.g., \$25K - \$100K',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.monetization_on),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Add your typical ticket size range.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: gapLG),
+                const Text(
+                  'Stages interested in',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: gapSM),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _stagesInterested.keys.map((stage) {
+                    return FilterChip(
+                      label: Text(stage),
+                      selected: _stagesInterested[stage]!,
+                      onSelected: (selected) {
+                        setState(() {
+                          _stagesInterested[stage] = selected;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: gapXL),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _saving ? null : _handleBack,
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: const Text('Back'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _saving ? null : _handleFinish,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: _saving
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Finish'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/spacing.dart';
+import 'onboarding_progress.dart';
 
 class ReasonScreen extends StatefulWidget {
   const ReasonScreen({Key? key}) : super(key: key);
@@ -33,7 +34,10 @@ class _ReasonScreenState extends State<ReasonScreen> {
                 end: Alignment.bottomRight,
                 colors: [
                   Theme.of(context).colorScheme.primaryContainer,
-                  Theme.of(context).colorScheme.primaryContainer.withOpacity(0.8),
+                  Theme.of(context)
+                      .colorScheme
+                      .primaryContainer
+                      .withValues(alpha: 0.8),
                 ],
               )
             : null,
@@ -42,14 +46,20 @@ class _ReasonScreenState extends State<ReasonScreen> {
         border: Border.all(
           color: isSelected
               ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.outline.withOpacity(0.2),
+              : Theme.of(context)
+                  .colorScheme
+                  .outline
+                  .withValues(alpha: 0.2),
           width: isSelected ? 2 : 1,
         ),
         boxShadow: [
           BoxShadow(
             color: isSelected
-                ? Theme.of(context).colorScheme.primary.withOpacity(0.3)
-                : Colors.black.withOpacity(0.08),
+                ? Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.3)
+                : Colors.black.withValues(alpha: 0.08),
             blurRadius: isSelected ? 12 : 8,
             offset: const Offset(0, 4),
             spreadRadius: isSelected ? 2 : 0,
@@ -116,6 +126,12 @@ class _ReasonScreenState extends State<ReasonScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const OnboardingProgress(
+              currentStep: 1,
+              totalSteps: 3,
+              label: 'Choose why you\'re joining',
+            ),
+            const SizedBox(height: gapLG),
             const Text(
               'Why are you joining?',
               style: TextStyle(

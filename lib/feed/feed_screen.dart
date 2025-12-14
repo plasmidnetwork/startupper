@@ -3,7 +3,11 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_models.dart';
 import 'feed_repository.dart';
-import 'dart:math';
+import '../services/supabase_service.dart';
+import 'feed_service.dart';
+import '../theme/snackbar.dart';
+import '../theme/loading_overlay.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({Key? key}) : super(key: key);
@@ -15,43 +19,89 @@ class FeedScreen extends StatefulWidget {
 class _FeedScreenState extends State<FeedScreen> {
   final Set<String> _activeFilters = {'Personalized'};
   final _repo = FeedRepository();
+  final _feedService = FeedService();
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
+  SharedPreferences? _prefs;
   List<FeedCardData> _items = [];
   bool _loading = true;
   bool _refreshing = false;
   bool _loadingMore = false;
+  bool _hasMore = true;
+  static const int _pageSize = 10;
+  String _searchTerm = '';
+  String? _userRole;
   String? _error;
   final bool _showSeedDialog = kDebugMode;
+  bool get _isLoggedIn => Supabase.instance.client.auth.currentSession != null;
 
   @override
   void initState() {
     super.initState();
-    _loadInitial();
+    _initFeed();
     _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
+  Future<void> _initFeed() async {
+    await _loadPrefs();
+    if (!mounted) return;
+    await _loadUserRole();
+    if (!mounted) return;
+    await _loadInitial();
+  }
+
+  Future<void> _loadUserRole() async {
+    try {
+      final profile = await SupabaseService().fetchProfile();
+      if (!mounted) return;
+      final role = profile?['role']?.toString();
+      if (role != null && role.isNotEmpty) {
+        setState(() {
+          _userRole = role;
+        });
+        if (_prefs == null || (_prefs?.getStringList('feed_filters')?.isEmpty ?? true)) {
+          _applyRoleDefaults(role);
+        }
+        if (_activeFilters.contains('Personalized')) {
+          await _loadInitial();
+        }
+      }
+    } catch (_) {
+      // Ignore role fetch errors; personalization will be skipped.
+    }
+  }
+
   Future<void> _loadInitial() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final data = await _repo.fetchFeed();
+      final page = await _repo.fetchFeed(
+        limit: _pageSize,
+        search: _searchTerm,
+        tags: _tagFiltersFromActive(),
+        types: _typeFiltersFromActive(),
+      );
       if (!mounted) return;
       setState(() {
-        _items = data;
+        _items = page.items;
+        _hasMore = page.hasMore;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _items = [];
+        _hasMore = true;
         _loading = false;
         _error = 'Could not load feed. Pull to retry.';
       });
@@ -59,42 +109,58 @@ class _FeedScreenState extends State<FeedScreen> {
   }
 
   Future<void> _refresh() async {
+    if (!mounted) return;
     setState(() {
       _refreshing = true;
       _error = null;
     });
     try {
-      final data = await _repo.fetchFeed();
+      final page = await _repo.fetchFeed(
+        limit: _pageSize,
+        search: _searchTerm,
+        tags: _tagFiltersFromActive(),
+        types: _typeFiltersFromActive(),
+      );
       if (!mounted) return;
       setState(() {
-        _items = data;
+        _items = page.items;
+        _hasMore = page.hasMore;
         _refreshing = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _refreshing = false;
+        _hasMore = true;
         _error = 'Could not refresh feed. Pull to retry.';
       });
     }
   }
 
   Future<void> _loadMore() async {
-    if (_loadingMore) return;
+    if (!mounted || _loadingMore || !_hasMore) return;
     setState(() {
       _loadingMore = true;
     });
     try {
-      final more = await _repo.loadMore(_items.length);
+      final page = await _repo.loadMore(
+        _items.length,
+        limit: _pageSize,
+        search: _searchTerm,
+        tags: _tagFiltersFromActive(),
+        types: _typeFiltersFromActive(),
+      );
       if (!mounted) return;
       setState(() {
-        _items = [..._items, ...more];
+        _items = [..._items, ...page.items];
+        _hasMore = page.hasMore;
         _loadingMore = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loadingMore = false;
+        _hasMore = true;
         _error = 'Could not load more right now.';
       });
     }
@@ -108,21 +174,146 @@ class _FeedScreenState extends State<FeedScreen> {
     }
   }
 
+  List<String> _tagFiltersFromActive() {
+    final tagMap = {
+      'AI': 'AI',
+      'Fintech': 'Fintech',
+      'Seed': 'Seed',
+      'Hiring': 'Hiring',
+      'Raising': 'Raising',
+    };
+    final tags = <String>[];
+    for (final filter in _activeFilters) {
+      final tag = tagMap[filter];
+      if (tag != null) tags.add(tag);
+    }
+    if (_activeFilters.contains('Personalized') && _userRole != null) {
+      tags.add(_userRole!);
+    }
+    return tags;
+  }
+
+  List<FeedCardType> _typeFiltersFromActive() {
+    final types = <FeedCardType>[];
+    if (_activeFilters.contains('Missions')) {
+      types.add(FeedCardType.mission);
+    }
+    return types;
+  }
+
+  Future<void> _loadPrefs() async {
+    _prefs ??= await SharedPreferences.getInstance();
+    final savedFilters = _prefs?.getStringList('feed_filters');
+    final savedSearch = _prefs?.getString('feed_search') ?? '';
+    if (savedFilters != null && savedFilters.isNotEmpty) {
+      _activeFilters
+        ..clear()
+        ..addAll(savedFilters);
+    }
+    _searchTerm = savedSearch;
+    _searchController.text = savedSearch;
+  }
+
+  void _savePrefs() {
+    _prefs?.setStringList('feed_filters', _activeFilters.toList());
+    _prefs?.setString('feed_search', _searchTerm);
+  }
+
+  void _applyRoleDefaults(String role) {
+    final r = role.toLowerCase();
+    if (_activeFilters.isEmpty) {
+      _activeFilters.add('Personalized');
+      if (r == 'founder') {
+        _activeFilters.add('Raising');
+      } else if (r == 'investor') {
+        _activeFilters.add('Seed');
+      } else if (r == 'end-user' || r == 'enduser') {
+        _activeFilters.add('Missions');
+      }
+    }
+  }
+
+  void _applySearch(String term) {
+    final trimmed = term.trim();
+    setState(() {
+      _searchTerm = trimmed;
+    });
+    _savePrefs();
+    _loadInitial();
+  }
+
+  void _resetFilters() {
+    setState(() {
+      _activeFilters
+        ..clear()
+        ..add('Personalized');
+    });
+    _savePrefs();
+    _loadInitial();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final featured = _items.where((item) => item.featured).toList();
+
+    if (!_isLoggedIn) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Feed'),
+          automaticallyImplyLeading: false,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_outline, size: 48),
+                const SizedBox(height: 12),
+                Text(
+                  'Please sign in to view the feed.',
+                  style: theme.textTheme.titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pushNamedAndRemoveUntil(
+                        context, '/auth', (route) => false);
+                  },
+                  child: const Text('Go to sign in'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Feed'),
         automaticallyImplyLeading: false,
         actions: [
-          if (_showSeedDialog)
+          IconButton(
+            icon: const Icon(Icons.person),
+            tooltip: 'Profile',
+            onPressed: () {
+              Navigator.pushNamed(context, '/profile');
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.mail_outline),
+            tooltip: 'Intros',
+            onPressed: () {
+              Navigator.pushNamed(context, '/intros');
+            },
+          ),
+          if (_showSeedDialog && _isLoggedIn)
             IconButton(
               icon: const Icon(Icons.add_box_outlined),
-              tooltip: 'Add sample item',
-              onPressed: _openSeedDialog,
+              tooltip: 'Post update',
+              onPressed: _openComposeDialog,
             ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -136,176 +327,334 @@ class _FeedScreenState extends State<FeedScreen> {
           ),
         ],
       ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _refresh,
-          displacement: 80,
-          child: CustomScrollView(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'What’s happening',
-                        style: theme.textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 12),
-                      _FiltersRow(
-                        activeFilters: _activeFilters,
-                        onToggle: (filter) {
-                          setState(() {
-                            if (_activeFilters.contains(filter)) {
-                              _activeFilters.remove(filter);
-                            } else {
-                              _activeFilters.add(filter);
-                            }
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              if (_loading)
-                const _FeedSkeleton()
-              else if (_error != null)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.wifi_off, size: 48),
-                          const SizedBox(height: 12),
-                          Text(
-                            _error!,
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyLarge,
-                          ),
-                          const SizedBox(height: 12),
-                          OutlinedButton(
-                            onPressed: _loadInitial,
-                            child: const Text('Retry'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                )
-              else if (_items.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
+      body: LoadingOverlay(
+        isLoading: _loading && _items.isEmpty,
+        message: 'Loading feed...',
+        child: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _refresh,
+            displacement: 80,
+            child: CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                     child: Column(
-                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.inbox, size: 48),
-                        const SizedBox(height: 12),
                         Text(
-                          'No updates yet',
-                          style: theme.textTheme.titleMedium,
+                          'What’s happening',
+                          style: theme.textTheme.titleLarge,
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Pull to refresh or adjust filters',
-                          style: theme.textTheme.bodyMedium
-                              ?.copyWith(color: theme.colorScheme.outline),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _searchController,
+                          textInputAction: TextInputAction.search,
+                          onSubmitted: _applySearch,
+                          decoration: InputDecoration(
+                            hintText: 'Search updates, asks, tags...',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _searchTerm.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      _applySearch('');
+                                    },
+                                  )
+                                : IconButton(
+                                    icon: const Icon(Icons.arrow_forward),
+                                    onPressed: () => _applySearch(
+                                        _searchController.text.trim()),
+                                  ),
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _FiltersRow(
+                          activeFilters: _activeFilters,
+                          onToggle: (filter) {
+                            setState(() {
+                              if (_activeFilters.contains(filter)) {
+                                _activeFilters.remove(filter);
+                              } else {
+                                _activeFilters.add(filter);
+                              }
+                            });
+                            _savePrefs();
+                            _loadInitial();
+                          },
+                          onReset: _resetFilters,
                         ),
                       ],
                     ),
                   ),
-                )
-              else ...[
-                // Featured section commented out for now
-                // if (featured.isNotEmpty)
-                //   SliverToBoxAdapter(
-                //     child: Padding(
-                //       padding: const EdgeInsets.only(bottom: 8),
-                //       child: SizedBox(
-                //         height: 250,
-                //         child: ListView.separated(
-                //           padding: const EdgeInsets.symmetric(horizontal: 16),
-                //           scrollDirection: Axis.horizontal,
-                //           itemBuilder: (context, index) => _FeaturedCard(
-                //             data: featured[index],
-                //           ),
-                //           separatorBuilder: (context, index) =>
-                //               const SizedBox(width: 12),
-                //           itemCount: featured.length,
-                //         ),
-                //       ),
-                //     ),
-                //   ),
-                SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final item = _items[index];
-                      return Padding(
-                        padding:
-                            EdgeInsets.fromLTRB(16, index == 0 ? 16 : 12, 16, 4),
-                        child: FeedCard(data: item),
-                      );
-                    },
-                    childCount: _items.length,
-                  ),
                 ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                if (_loading)
+                  const _FeedSkeleton()
+                else if (_error != null)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
                     child: Center(
-                      child: _loadingMore
-                          ? const CircularProgressIndicator()
-                          : Text(
-                              _refreshing ? 'Refreshing...' : ' ',
-                              style: theme.textTheme.bodySmall,
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.wifi_off, size: 48),
+                            const SizedBox(height: 12),
+                            Text(
+                              _error!,
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.bodyLarge,
                             ),
+                            const SizedBox(height: 12),
+                            OutlinedButton(
+                              onPressed: _loadInitial,
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  )
+                else if (_items.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.inbox, size: 48),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No updates yet',
+                            style: theme.textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Pull to refresh or adjust filters',
+                            style: theme.textTheme.bodyMedium
+                                ?.copyWith(color: theme.colorScheme.outline),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else ...[
+                  // Featured section commented out for now
+                  // if (featured.isNotEmpty)
+                  //   SliverToBoxAdapter(
+                  //     child: Padding(
+                  //       padding: const EdgeInsets.only(bottom: 8),
+                  //       child: SizedBox(
+                  //         height: 250,
+                  //         child: ListView.separated(
+                  //           padding: const EdgeInsets.symmetric(horizontal: 16),
+                  //           scrollDirection: Axis.horizontal,
+                  //           itemBuilder: (context, index) => _FeaturedCard(
+                  //             data: featured[index],
+                  //           ),
+                  //           separatorBuilder: (context, index) =>
+                  //               const SizedBox(width: 12),
+                  //           itemCount: featured.length,
+                  //         ),
+                  //       ),
+                  //     ),
+                  //   ),
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final item = _items[index];
+                        return Padding(
+                          padding: EdgeInsets.fromLTRB(
+                              16, index == 0 ? 16 : 12, 16, 4),
+                          child: FeedCard(data: item),
+                        );
+                      },
+                      childCount: _items.length,
                     ),
                   ),
-                ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: _loadingMore
+                            ? const CircularProgressIndicator()
+                            : _refreshing
+                                ? Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const SizedBox(
+                                        height: 18,
+                                        width: 18,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Refreshing feed...',
+                                        style: theme.textTheme.bodySmall,
+                                      ),
+                                    ],
+                                  )
+                                : !_hasMore
+                                    ? Text(
+                                        'You\'re all caught up',
+                                        style: theme.textTheme.bodySmall,
+                                      )
+                                    : Text(
+                                        ' ',
+                                        style: theme.textTheme.bodySmall,
+                                      ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  void _openSeedDialog() {
+  void _openComposeDialog() {
     showDialog(
       context: context,
-      builder: (context) => _SeedDialog(
-        onAdd: (item) async {
+      builder: (context) => _ComposeDialog(
+        userRole: _userRole,
+        onPost: (payload) async {
+          if (!_isLoggedIn) {
+            if (!mounted) return;
+            showErrorSnackBar(context, 'Please sign in to post.');
+            return;
+          }
           try {
-            await Supabase.instance.client.from('feed_items').insert({
-              'type': item.type.name,
-              'content': {
-                'title': item.title,
-                'subtitle': item.subtitle,
-                'ask': item.ask,
-                'tags': item.tags,
-                'reward': item.reward,
-                'featured': item.featured,
-                'metrics': item.metrics
-                    .map((m) => {'label': m.label, 'value': m.value})
-                    .toList(),
-              },
-              'user_id': Supabase.instance.client.auth.currentUser?.id,
-            });
+            await _feedService.createFeedItem(
+              type: payload.type,
+              title: payload.title,
+              subtitle: payload.subtitle,
+              ask: payload.ask,
+              tags: payload.tags,
+              reward: payload.reward,
+              metrics: payload.metrics,
+              featured: payload.featured,
+              userRoleTag: payload.userRoleTag,
+            );
             await _refresh();
+            if (!mounted) return;
+            showSuccessSnackBar(context, 'Posted to feed');
           } catch (e) {
             if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Could not add item: $e')),
+            showErrorSnackBar(
+              context,
+              'Could not post right now. Check your connection and try again.',
             );
           }
         },
+      ),
+    );
+  }
+}
+
+class _PreviewCard extends StatelessWidget {
+  const _PreviewCard({
+    required this.type,
+    required this.title,
+    required this.subtitle,
+    required this.tags,
+    this.ask,
+    this.reward,
+    this.featured = false,
+    this.userRole,
+  });
+
+  final FeedCardType type;
+  final String title;
+  final String subtitle;
+  final List<String> tags;
+  final String? ask;
+  final String? reward;
+  final bool featured;
+  final String? userRole;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final previewTags = {
+      ...tags,
+      if (userRole != null && userRole!.isNotEmpty) userRole!,
+    }.toList();
+    return Card(
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Preview',
+                  style: theme.textTheme.labelLarge,
+                ),
+                Chip(
+                  label: Text(type.name),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: theme.textTheme.bodyMedium,
+            ),
+            if (ask != null) ...[
+              const SizedBox(height: 8),
+              _AskChip(label: ask!),
+            ],
+            if (reward != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                reward!,
+                style: theme.textTheme.labelMedium,
+              ),
+            ],
+            if (previewTags.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: previewTags
+                    .map((t) => Chip(
+                          label: Text(t),
+                          visualDensity: VisualDensity.compact,
+                        ))
+                    .toList(),
+              ),
+            ],
+            if (featured) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Featured',
+                style: theme.textTheme.labelMedium
+                    ?.copyWith(color: theme.colorScheme.primary),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -326,7 +675,6 @@ class FeedCard extends StatelessWidget {
       case FeedCardType.investor:
         return _InvestorCard(data: data);
       case FeedCardType.update:
-      default:
         return _UpdateCard(data: data);
     }
   }
@@ -395,7 +743,7 @@ class _HighlightCard extends StatelessWidget {
             constraints: const BoxConstraints(minHeight: 96),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [accent.withOpacity(0.18), accent.withOpacity(0.05)],
+                colors: [accent.withValues(alpha: 0.18), accent.withValues(alpha: 0.05)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -424,8 +772,7 @@ class _HighlightCard extends StatelessWidget {
                         .map((tag) => Chip(
                               label: Text(tag),
                               visualDensity: VisualDensity.compact,
-                              backgroundColor:
-                                  Colors.white.withOpacity(0.85),
+                              backgroundColor: Colors.white.withValues(alpha: 0.85),
                             ))
                         .toList(),
                   ),
@@ -486,13 +833,13 @@ class _MissionCard extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: accent.withOpacity(0.12),
+                      color: accent.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       data.reward!,
-                      style: theme.textTheme.labelMedium
-                          ?.copyWith(color: accent, fontWeight: FontWeight.w600),
+                      style: theme.textTheme.labelMedium?.copyWith(
+                          color: accent, fontWeight: FontWeight.w600),
                     ),
                   ),
               ],
@@ -516,7 +863,8 @@ class _MissionCard extends StatelessWidget {
                 children: data.tags
                     .map((tag) => Chip(
                           label: Text(tag),
-                          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                          backgroundColor:
+                              theme.colorScheme.surfaceContainerHighest,
                           visualDensity: VisualDensity.compact,
                         ))
                     .toList(),
@@ -529,7 +877,8 @@ class _MissionCard extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Mission claimed: ${data.title}')),
+                        SnackBar(
+                            content: Text('Mission claimed: ${data.title}')),
                       );
                     },
                     style: ElevatedButton.styleFrom(
@@ -559,14 +908,56 @@ class _MissionCard extends StatelessWidget {
   }
 }
 
-class _InvestorCard extends StatelessWidget {
+class _InvestorCard extends StatefulWidget {
   const _InvestorCard({required this.data});
 
   final FeedCardData data;
 
   @override
+  State<_InvestorCard> createState() => _InvestorCardState();
+}
+
+class _InvestorCardState extends State<_InvestorCard> {
+  bool _requesting = false;
+  bool _introSent = false;
+
+  Future<void> _handleRequestIntro() async {
+    if (_requesting || _introSent) return;
+    final authorId = widget.data.author.id;
+    if (authorId == null || authorId.isEmpty) {
+      showErrorSnackBar(context, 'Missing member profile for intro.');
+      return;
+    }
+    final message = await showDialog<String?>(
+      context: context,
+      builder: (context) => _IntroDialog(author: widget.data.author),
+    );
+    if (message == null) return;
+
+    setState(() => _requesting = true);
+    try {
+      await FeedService().requestIntro(
+        targetUserId: authorId,
+        feedItemId: widget.data.id,
+        message: message.trim().isEmpty ? null : message.trim(),
+      );
+      if (!mounted) return;
+      setState(() => _introSent = true);
+      showSuccessSnackBar(context, 'Intro request sent');
+    } catch (_) {
+      if (!mounted) return;
+      showErrorSnackBar(context, 'Could not send intro right now.');
+    } finally {
+      if (mounted) {
+        setState(() => _requesting = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final data = widget.data;
     final accent = _roleAccent(data.author.role, theme);
 
     return Card(
@@ -598,7 +989,7 @@ class _InvestorCard extends StatelessWidget {
                 children: data.tags
                     .map((tag) => Chip(
                           label: Text(tag),
-                          backgroundColor: accent.withOpacity(0.12),
+                          backgroundColor: accent.withValues(alpha: 0.12),
                           visualDensity: VisualDensity.compact,
                         ))
                     .toList(),
@@ -612,18 +1003,20 @@ class _InvestorCard extends StatelessWidget {
             Row(
               children: [
                 ElevatedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Intro requested with ${data.author.name}')),
-                    );
-                  },
+                  onPressed: _requesting || _introSent ? null : _handleRequestIntro,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 18,
                       vertical: 12,
                     ),
                   ),
-                  child: const Text('Request intro'),
+                  child: _requesting
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(_introSent ? 'Intro sent' : 'Request intro'),
                 ),
                 const SizedBox(width: 12),
                 OutlinedButton(
@@ -663,10 +1056,11 @@ class AvatarNameRow extends StatelessWidget {
     return Row(
       children: [
         CircleAvatar(
-          backgroundColor: accent.withOpacity(0.16),
-          backgroundImage: (author.avatarUrl != null && author.avatarUrl!.isNotEmpty)
-              ? NetworkImage(author.avatarUrl!)
-              : null,
+          backgroundColor: accent.withValues(alpha: 0.16),
+          backgroundImage:
+              (author.avatarUrl != null && author.avatarUrl!.isNotEmpty)
+                  ? NetworkImage(author.avatarUrl!)
+                  : null,
           child: (author.avatarUrl == null || author.avatarUrl!.isEmpty)
               ? Text(
                   initial,
@@ -717,7 +1111,7 @@ class MetricPills extends StatelessWidget {
             (metric) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: metric.color?.withOpacity(0.12) ??
+                color: metric.color?.withValues(alpha: 0.12) ??
                     theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -792,6 +1186,7 @@ class ActionBar extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _FeaturedCard extends StatelessWidget {
   const _FeaturedCard({required this.data});
 
@@ -799,6 +1194,7 @@ class _FeaturedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ignore: unused_element
     final theme = Theme.of(context);
     final accent = _roleAccent(data.author.role, theme);
 
@@ -807,12 +1203,12 @@ class _FeaturedCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
-          colors: [accent.withOpacity(0.16), accent.withOpacity(0.04)],
+          colors: [accent.withValues(alpha: 0.16), accent.withValues(alpha: 0.04)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        border: Border.all(color: accent.withOpacity(0.16)),
-        ),
+        border: Border.all(color: accent.withValues(alpha: 0.16)),
+      ),
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -837,7 +1233,7 @@ class _FeaturedCard extends StatelessWidget {
                 .map((tag) => Chip(
                       label: Text(tag),
                       visualDensity: VisualDensity.compact,
-                      backgroundColor: Colors.white.withOpacity(0.9),
+                      backgroundColor: Colors.white.withValues(alpha: 0.9),
                     ))
                 .toList(),
           ),
@@ -878,7 +1274,7 @@ class _AskChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withOpacity(0.08),
+        color: theme.colorScheme.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
@@ -894,10 +1290,12 @@ class _FiltersRow extends StatelessWidget {
   const _FiltersRow({
     required this.activeFilters,
     required this.onToggle,
+    required this.onReset,
   });
 
   final Set<String> activeFilters;
   final void Function(String) onToggle;
+  final VoidCallback onReset;
 
   @override
   Widget build(BuildContext context) {
@@ -914,87 +1312,378 @@ class _FiltersRow extends StatelessWidget {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: filters
-          .map(
-            (filter) => FilterChip(
-              label: Text(filter),
-              selected: activeFilters.contains(filter),
-              onSelected: (_) => onToggle(filter),
-            ),
-          )
-          .toList(),
+      children: [
+        ...filters
+            .map(
+              (filter) => FilterChip(
+                label: Text(filter),
+                selected: activeFilters.contains(filter),
+                onSelected: (_) => onToggle(filter),
+              ),
+            )
+            .toList(),
+        if (activeFilters.isNotEmpty)
+          ActionChip(
+            label: const Text('Reset'),
+            onPressed: onReset,
+          ),
+      ],
     );
   }
 }
 
-class _SeedDialog extends StatefulWidget {
-  const _SeedDialog({required this.onAdd});
+class _ComposePayload {
+  _ComposePayload({
+    required this.type,
+    required this.title,
+    required this.subtitle,
+    this.ask,
+    this.tags = const [],
+    this.metrics = const [],
+    this.reward,
+    this.featured = false,
+    this.userRoleTag,
+  });
 
-  final Future<void> Function(FeedCardData) onAdd;
-
-  @override
-  State<_SeedDialog> createState() => _SeedDialogState();
+  final FeedCardType type;
+  final String title;
+  final String subtitle;
+  final String? ask;
+  final List<String> tags;
+  final List<MetricHighlight> metrics;
+  final String? reward;
+  final bool featured;
+  final String? userRoleTag;
 }
 
-class _SeedDialogState extends State<_SeedDialog> {
+class _ComposeDialog extends StatefulWidget {
+  const _ComposeDialog({required this.onPost, this.userRole});
+
+  final Future<void> Function(_ComposePayload) onPost;
+  final String? userRole;
+
+  @override
+  State<_ComposeDialog> createState() => _ComposeDialogState();
+}
+
+class _ComposeDialogState extends State<_ComposeDialog> {
+  final _formKey = GlobalKey<FormState>();
   FeedCardType _type = FeedCardType.update;
-  final _titleCtrl = TextEditingController(text: 'Sample update');
-  final _subtitleCtrl =
-      TextEditingController(text: 'This is a sample item from the app.');
-  final _askCtrl = TextEditingController(text: 'Looking for early feedback');
+  final _titleCtrl = TextEditingController();
+  final _subtitleCtrl = TextEditingController();
+  final _askCtrl = TextEditingController();
+  final _tagsCtrl = TextEditingController();
+  final _rewardCtrl = TextEditingController();
   bool _featured = false;
+  bool _posting = false;
+  static const int _maxTags = 6;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleCtrl.addListener(_updatePreview);
+    _subtitleCtrl.addListener(_updatePreview);
+    _askCtrl.addListener(_updatePreview);
+    _tagsCtrl.addListener(_updatePreview);
+    _rewardCtrl.addListener(_updatePreview);
+  }
 
   @override
   void dispose() {
+    _titleCtrl.removeListener(_updatePreview);
+    _subtitleCtrl.removeListener(_updatePreview);
+    _askCtrl.removeListener(_updatePreview);
+    _tagsCtrl.removeListener(_updatePreview);
+    _rewardCtrl.removeListener(_updatePreview);
     _titleCtrl.dispose();
     _subtitleCtrl.dispose();
     _askCtrl.dispose();
+    _tagsCtrl.dispose();
+    _rewardCtrl.dispose();
     super.dispose();
+  }
+
+  void _updatePreview() {
+    setState(() {});
+  }
+
+  Future<void> _handlePost() async {
+    if (_posting) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() {
+      _posting = true;
+    });
+    final tags = _tagsCtrl.text
+        .split(',')
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (tags.length > _maxTags) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Limit to $_maxTags tags')),
+      );
+      setState(() => _posting = false);
+      return;
+    }
+    final payload = _ComposePayload(
+      type: _type,
+      title: _titleCtrl.text.trim(),
+      subtitle: _subtitleCtrl.text.trim(),
+      ask: _askCtrl.text.trim().isEmpty ? null : _askCtrl.text.trim(),
+      tags: tags,
+      reward: _rewardCtrl.text.trim().isEmpty ? null : _rewardCtrl.text.trim(),
+      metrics: const [],
+      featured: _featured,
+      userRoleTag: widget.userRole,
+    );
+    final shouldPost = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Post this update?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Type: ${payload.type.name}'),
+                const SizedBox(height: 8),
+                Text('Title: ${payload.title}'),
+                const SizedBox(height: 4),
+                Text(
+                  payload.subtitle,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                if (payload.ask != null) ...[
+                  const SizedBox(height: 8),
+                  Text('Ask: ${payload.ask}'),
+                ],
+                if (payload.reward != null) ...[
+                  const SizedBox(height: 4),
+                  Text('Reward: ${payload.reward}'),
+                ],
+                if (payload.tags.isNotEmpty || payload.userRoleTag != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tags: ${(payload.tags + (payload.userRoleTag != null ? [
+                        payload.userRoleTag!
+                      ] : [])).join(', ')}',
+                  ),
+                ],
+                if (payload.featured) ...[
+                  const SizedBox(height: 8),
+                  const Text('Featured'),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Post'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!shouldPost) {
+      setState(() => _posting = false);
+      return;
+    }
+
+    await widget.onPost(payload);
+    if (mounted) Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Add sample feed item'),
+      title: const Text('Post to feed'),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButton<FeedCardType>(
-              value: _type,
-              onChanged: (val) {
-                if (val != null) setState(() => _type = val);
-              },
-              items: FeedCardType.values
-                  .map((t) => DropdownMenuItem(
-                        value: t,
-                        child: Text(t.name),
-                      ))
-                  .toList(),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _titleCtrl,
-              decoration: const InputDecoration(labelText: 'Title'),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _subtitleCtrl,
-              decoration: const InputDecoration(labelText: 'Subtitle'),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _askCtrl,
-              decoration: const InputDecoration(labelText: 'Ask'),
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              value: _featured,
-              onChanged: (val) => setState(() => _featured = val),
-              title: const Text('Featured'),
-            ),
-          ],
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<FeedCardType>(
+                value: _type,
+                decoration: const InputDecoration(
+                  labelText: 'Type',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (val) {
+                  if (val != null) setState(() => _type = val);
+                },
+                items: FeedCardType.values
+                    .map((t) => DropdownMenuItem(
+                          value: t,
+                          child: Text(t.name),
+                        ))
+                    .toList(),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _titleCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Title',
+                  border: OutlineInputBorder(),
+                ),
+                maxLength: 80,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return 'Title is required';
+                  }
+                  if (v.trim().length < 4) {
+                    return 'Title too short';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _subtitleCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Subtitle',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+                maxLength: 280,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return 'Subtitle is required';
+                  }
+                  if (v.trim().length < 8) {
+                    return 'Subtitle too short';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _askCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Ask (optional)',
+                  border: OutlineInputBorder(),
+                ),
+                maxLength: 140,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _tagsCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Tags (comma-separated)',
+                  border: const OutlineInputBorder(),
+                  helperText: widget.userRole == null
+                      ? null
+                      : 'Your role "${widget.userRole}" will be auto-tagged',
+                ),
+                maxLength: 120,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _rewardCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Reward (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                value: _featured,
+                onChanged: (val) => setState(() => _featured = val),
+                title: const Text('Featured'),
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: 16),
+              _PreviewCard(
+                type: _type,
+                title: _titleCtrl.text.trim().isEmpty
+                    ? 'Preview title'
+                    : _titleCtrl.text.trim(),
+                subtitle: _subtitleCtrl.text.trim().isEmpty
+                    ? 'Preview subtitle'
+                    : _subtitleCtrl.text.trim(),
+                ask: _askCtrl.text.trim().isEmpty ? null : _askCtrl.text.trim(),
+                tags: _tagsCtrl.text
+                    .split(',')
+                    .map((t) => t.trim())
+                    .where((t) => t.isNotEmpty)
+                    .toList(),
+                reward: _rewardCtrl.text.trim().isEmpty
+                    ? null
+                    : _rewardCtrl.text.trim(),
+                featured: _featured,
+                userRole: widget.userRole,
+              ),
+            ],
+          ),
         ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _posting ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _posting ? null : _handlePost,
+          child: _posting
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Post'),
+        ),
+      ],
+    );
+  }
+}
+
+class _IntroDialog extends StatefulWidget {
+  const _IntroDialog({required this.author});
+
+  final FeedAuthor author;
+
+  @override
+  State<_IntroDialog> createState() => _IntroDialogState();
+}
+
+class _IntroDialogState extends State<_IntroDialog> {
+  final _messageCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _messageCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Request intro'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Send a short note to ${widget.author.name}',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _messageCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Message (optional)',
+              border: OutlineInputBorder(),
+              hintText: 'Context or what you are looking for',
+            ),
+            maxLines: 3,
+            maxLength: 240,
+          ),
+        ],
       ),
       actions: [
         TextButton(
@@ -1002,30 +1691,8 @@ class _SeedDialogState extends State<_SeedDialog> {
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: () async {
-            final randomMetric = MetricHighlight(
-              label: 'Signal',
-              value: '${Random().nextInt(100)}%',
-            );
-            final item = FeedCardData(
-              type: _type,
-              author: const FeedAuthor(
-                name: 'You',
-                role: 'Member',
-                affiliation: '',
-                timeAgo: 'now',
-              ),
-              title: _titleCtrl.text,
-              subtitle: _subtitleCtrl.text,
-              ask: _askCtrl.text.isEmpty ? null : _askCtrl.text,
-              metrics: [randomMetric],
-              tags: const ['App-seeded'],
-              featured: _featured,
-            );
-            await widget.onAdd(item);
-            if (mounted) Navigator.pop(context);
-          },
-          child: const Text('Add'),
+          onPressed: () => Navigator.pop(context, _messageCtrl.text),
+          child: const Text('Send request'),
         ),
       ],
     );
@@ -1070,7 +1737,7 @@ class _SkeletonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = Theme.of(context).colorScheme.surfaceVariant;
+    final base = Theme.of(context).colorScheme.surfaceContainerHighest;
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
@@ -1114,7 +1781,7 @@ class _SkeletonCard extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: base.withOpacity(0.6),
+        color: base.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(6),
       ),
     );
@@ -1125,7 +1792,7 @@ class _SkeletonCard extends StatelessWidget {
       width: width,
       height: 28,
       decoration: BoxDecoration(
-        color: base.withOpacity(0.5),
+        color: base.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(14),
       ),
     );

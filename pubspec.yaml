@@ -20,6 +20,7 @@ dependencies:
   # Image picker for profile pictures
   image_picker: ^1.0.4
   supabase_flutter: ^2.5.5
+  shared_preferences: ^2.2.2
 
 # Development dependencies are only used during development
 dev_dependencies:

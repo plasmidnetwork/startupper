@@ -4,6 +4,9 @@ import 'package:image_picker/image_picker.dart';
 import '../app_config.dart';
 import '../theme/spacing.dart';
 import '../services/supabase_service.dart';
+import 'onboarding_progress.dart';
+import '../theme/snackbar.dart';
+import '../theme/loading_overlay.dart';
 
 class CommonOnboardingScreen extends StatefulWidget {
   const CommonOnboardingScreen({Key? key}) : super(key: key);
@@ -58,22 +61,23 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
     showModalBottomSheet(
       context: context,
       builder: (context) => SafeArea(
-        child: Wrap(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.photo_camera),
-              title: const Text('Take Photo'),
-              onTap: () {
-                Navigator.pop(context);
-                _pickProfileImage(ImageSource.camera);
-              },
-            ),
-            ListTile(
               leading: const Icon(Icons.photo_library),
-              title: const Text('Choose from Gallery'),
+              title: const Text('Choose from gallery'),
               onTap: () {
                 Navigator.pop(context);
                 _pickProfileImage(ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera),
+              title: const Text('Take a photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickProfileImage(ImageSource.camera);
               },
             ),
           ],
@@ -115,8 +119,10 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
       _goToRoleFlow(role);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save profile: $e')),
+      showErrorSnackBar(
+        context,
+        'Could not save your profile. Check your connection and try again.',
+        onRetry: _saving ? null : () => _saveProfile(role),
       );
       setState(() => _saving = false);
     }
@@ -151,153 +157,167 @@ class _CommonOnboardingScreenState extends State<CommonOnboardingScreen> {
         ),
         title: const Text('Your Profile'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Tell us about yourself',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+      body: LoadingOverlay(
+        isLoading: _saving,
+        message: 'Saving your profile...',
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                OnboardingProgress(
+                  currentStep: 2,
+                  totalSteps: 3,
+                  label: _saving ? 'Saving your profile...' : 'Set up your profile',
                 ),
-              ),
-              const SizedBox(height: gapXL),
-              Center(
-                child: Column(
-                  children: [
-                    GestureDetector(
-                      onTap: _showImageSourceOptions,
-                      child: Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Theme.of(context).colorScheme.primaryContainer,
-                          border: Border.all(
-                            color: Theme.of(context).colorScheme.primary,
-                            width: 3,
+                if (_saving) ...[
+                  const SizedBox(height: gapSM),
+                  const LinearProgressIndicator(minHeight: 4),
+                ],
+                const SizedBox(height: gapLG),
+                const Text(
+                  'Tell us about yourself',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: gapXL),
+                Center(
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        onTap: _showImageSourceOptions,
+                        child: Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Theme.of(context).colorScheme.primaryContainer,
+                            border: Border.all(
+                              color: Theme.of(context).colorScheme.primary,
+                              width: 3,
+                            ),
+                            image: _profileImage != null
+                                ? DecorationImage(
+                                    image: FileImage(_profileImage!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
                           ),
-                          image: _profileImage != null
-                              ? DecorationImage(
-                                  image: FileImage(_profileImage!),
-                                  fit: BoxFit.cover,
+                          child: _profileImage == null
+                              ? Icon(
+                                  Icons.add_a_photo,
+                                  size: 40,
+                                  color: Theme.of(context).colorScheme.primary,
                                 )
                               : null,
                         ),
-                        child: _profileImage == null
-                            ? Icon(
-                                Icons.add_a_photo,
-                                size: 40,
-                                color: Theme.of(context).colorScheme.primary,
-                              )
-                            : null,
+                      ),
+                      const SizedBox(height: gapSM),
+                      TextButton.icon(
+                        onPressed: _showImageSourceOptions,
+                        icon: const Icon(Icons.camera_alt, size: 18),
+                        label: Text(
+                          _profileImage == null ? 'Add profile picture' : 'Change picture',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: gapXL),
+                TextFormField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please add your full name.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: gapMD),
+                TextFormField(
+                  controller: _headlineController,
+                  decoration: const InputDecoration(
+                    labelText: 'Headline *',
+                    hintText: 'e.g., Product Designer • Ex-Google',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.text_fields),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Add a quick headline to show what you do.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: gapMD),
+                TextFormField(
+                  controller: _locationController,
+                  decoration: const InputDecoration(
+                    labelText: 'Location *',
+                    hintText: 'e.g., San Francisco, CA',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.location_on),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Add your city/region so we can tailor matches.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: gapLG),
+                SwitchListTile(
+                  title: const Text('Available for freelancing?'),
+                  subtitle: const Text('Let startups know you\'re open to projects'),
+                  value: _availableForFreelancing,
+                  onChanged: (value) {
+                    setState(() {
+                      _availableForFreelancing = value;
+                    });
+                  },
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                const SizedBox(height: gapXL),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _saving ? null : _handleBack,
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: const Text('Back'),
                       ),
                     ),
-                    const SizedBox(height: gapSM),
-                    TextButton.icon(
-                      onPressed: _showImageSourceOptions,
-                      icon: const Icon(Icons.camera_alt, size: 18),
-                      label: Text(
-                        _profileImage == null ? 'Add profile picture' : 'Change picture',
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _saving ? null : _handleNext,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: _saving
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Next'),
                       ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: gapXL),
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Full Name *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.person),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Full name is required';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: gapMD),
-              TextFormField(
-                controller: _headlineController,
-                decoration: const InputDecoration(
-                  labelText: 'Headline *',
-                  hintText: 'e.g., Product Designer • Ex-Google',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.text_fields),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Headline is required';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: gapMD),
-              TextFormField(
-                controller: _locationController,
-                decoration: const InputDecoration(
-                  labelText: 'Location *',
-                  hintText: 'e.g., San Francisco, CA',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.location_on),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Location is required';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: gapLG),
-              SwitchListTile(
-                title: const Text('Available for freelancing?'),
-                subtitle: const Text('Let startups know you\'re open to projects'),
-                value: _availableForFreelancing,
-                onChanged: (value) {
-                  setState(() {
-                    _availableForFreelancing = value;
-                  });
-                },
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-              ),
-              const SizedBox(height: gapXL),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _saving ? null : _handleBack,
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: const Text('Back'),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _saving ? null : _handleNext,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: _saving
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Next'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

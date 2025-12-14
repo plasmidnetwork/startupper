@@ -7,7 +7,7 @@ A platform where founders, investors, and early users build together.
 Startupper is a Flutter app that connects three types of users in the startup ecosystem:
 - **Founders** - Build and grow startups, find investors and talent
 - **Investors** - Discover and fund promising startups  
-- **End-users** - Join startups, freelance, or test products
+- **End-users** - Join startups, freelance, collaborate or test products
 
 ## Project Structure
 
@@ -27,12 +27,16 @@ startupper/
 │   ├── theme/
 │   │   ├── app_theme.dart     # Centralized theming, buttons, chips, cards
 │   │   └── spacing.dart       # Shared spacing tokens
+│   ├── services/
+│   │   └── supabase_service.dart # Profile/avatar + role detail upserts
 │   └── feed/
 │       ├── feed_screen.dart    # Feed UI, cards, refresh/load-more
 │       ├── feed_models.dart    # Feed models and enums
-│       └── feed_repository.dart # Supabase data layer with debug logging
+│       └── feed_repository.dart # Supabase data layer (fetches feed_items)
 ├── ios/                   # iOS platform files
 ├── macos/                 # macOS platform files
+├── supabase/
+│   └── schema.sql         # DB tables, RLS, storage policies
 ├── pubspec.yaml           # Project dependencies and configuration
 └── README.md              # This file
 ```
@@ -48,15 +52,27 @@ startupper/
 
 1. Clone the repository:
    ```bash
-   cd /path/to/Startupper
+   git clone <repo-url>
+   cd Startupper
    ```
 
-2. Get dependencies:
+2. (macOS once per machine) Enable desktop support:
+   ```bash
+   flutter config --enable-macos-desktop
+   ```
+
+3. (Android once per machine) Enable Android support:
+   ```bash
+   flutter config --enable-android
+   ```
+   Ensure Android SDK/Platform Tools are installed and an emulator/AVD is set up via Android Studio or `avdmanager`.
+
+4. Get dependencies:
    ```bash
    flutter pub get
    ```
 
-3. Run the app:
+5. Run the app:
    ```bash
    # On iOS device
    flutter run --dart-define=SUPABASE_URL=<url> --dart-define=SUPABASE_ANON_KEY=<anon-key> -d <device-id>
@@ -64,10 +80,28 @@ startupper/
    # On macOS
    flutter run --dart-define=SUPABASE_URL=<url> --dart-define=SUPABASE_ANON_KEY=<anon-key> -d macos
    ```
-   Optional extras:
+Optional extras:
+```bash
+--dart-define=SUPABASE_EMAIL_REDIRECT=<redirect-url>  # deep link or HTTPS for email verification
+--dart-define=BYPASS_VALIDATION=true                  # testing bypass
+```
+
+### Configuring dart-defines via environment variables
+
+1. Export your values in the shell (e.g., zsh/bash):
    ```bash
-   --dart-define=SUPABASE_EMAIL_REDIRECT=<redirect-url>  # deep link or HTTPS for email verification
-   --dart-define=BYPASS_VALIDATION=true                  # testing bypass
+   export SUPABASE_URL="https://abc.supabase.co"
+   export SUPABASE_ANON_KEY="your-anon-key"
+   export SUPABASE_EMAIL_REDIRECT="startupper://auth-callback" # optional
+   export BYPASS_VALIDATION="true"                             # optional
+   ```
+2. Pass them into `flutter run`:
+   ```bash
+   flutter run \
+     --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+     --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+     --dart-define=SUPABASE_EMAIL_REDIRECT="$SUPABASE_EMAIL_REDIRECT" \
+     --dart-define=BYPASS_VALIDATION="$BYPASS_VALIDATION"
    ```
 
 ## Current Implementation
@@ -116,16 +150,18 @@ startupper/
    - Back and Finish navigation
 
 7. **Feed Screen** (`/feed`, `lib/feed/feed_screen.dart`)
-   - Hero featured strip with horizontal cards
    - Main feed list with card variants:
      - Update cards (metrics, ask chips, applause/comment/interest actions)
      - Startup highlights (tags, metrics, asks, CTA)
      - Missions/tasks (reward badge, tags, claim/save CTAs)
      - Investor spotlights (thesis, tags, intro/share CTAs)
    - Filter chips row and role-accented styling
+   - Search bar + tag/type filters (role-aware “Personalized” applies your role as a tag)
+   - Compose dialog to post feed items (types, tags, asks, reward, featured) with preview + confirmation
    - Pull-to-refresh and auto load-more near scroll end
-   - Feed repository now fetches from Supabase `feed_items` (no mock fallback)
-   - Debug-only “Add sample item” action in feed AppBar to seed `feed_items`
+   - Fetches from Supabase `feed_items` (no mock fallback)
+   - Post action in AppBar (hidden when signed out); role auto-tagging on posts
+   - Profile entry in AppBar to view your profile
 
 ### ✨ Key Features
 
@@ -163,6 +199,10 @@ startupper/
 - ✅ Profile + role detail upserts to Supabase; optional avatar upload to Storage
   - Common onboarding writes to `profiles` (+ avatar to `avatars` bucket if provided)
   - Founder/Investor/End-user onboarding writes to respective tables
+- ✅ Feed fetching from Supabase `feed_items` with avatars
+- ✅ Feed search + tag/type filtering with role-aware personalization (reads)
+- ✅ Feed posting with preview/confirmation, role auto-tagging, and sign-out guard
+- ✅ Profile screen with edit mode, role-specific fields, avatar updates, and role switching (with confirmation)
 
 **Code Quality:**
 - ✅ Null-safe Dart
@@ -187,6 +227,7 @@ dependencies:
 
 - See `supabase/schema.sql` for tables, indexes, and RLS policies (profiles, role details, feed_items).
 - Create a project in Supabase, copy `SUPABASE_URL` and `SUPABASE_ANON_KEY`, apply `supabase/schema.sql` via SQL editor or `supabase db push`, then run the app with the dart-defines above.
+- Intro requests: apply `supabase/migrations/2024-01-01_add_contact_requests.sql` (creates `contact_requests` with RLS allowing requester/target reads and requester inserts).
 
 ### Supabase Setup Checklist
 
@@ -206,7 +247,7 @@ dependencies:
 
 4. **Run the app with dart-defines:**
    ```bash
-   flutter run \
+  flutter run \
      --dart-define=SUPABASE_URL=<your-project-url> \
      --dart-define=SUPABASE_ANON_KEY=<your-anon-key> \
      -d <device>
@@ -244,14 +285,15 @@ FeedScreen
 
 ### Immediate Priorities
 - [x] Add form validation (required fields, email format)
-- [ ] Add loading states and error handling
-- [ ] Integrate Supabase authentication (sessions, redirects) end-to-end
+- [x] Add loading states and error handling
+- [x] Integrate Supabase authentication (sessions, redirects) end-to-end
 - [x] Set up Supabase Storage for profile pictures (bucket `avatars`, public URLs working)
 - [x] Save user profiles to Supabase database (profile upsert + avatar upload working)
 - [x] Move feed data to a service layer and wire to backend when ready
-- [ ] Add empty/skeleton states for feed loading/empty
-- [ ] Wire feed inserts/search/filter to Supabase (reads now come from `feed_items`; debug-only seeding exists)
-- [ ] Session-aware routing to skip onboarding when profile/role exists
+- [x] Add skeleton states for feed loading (no shimmer)
+- [x] Wire feed search/filter to Supabase reads
+- [x] Wire feed inserts to Supabase (compose dialog with preview/confirmation)
+- [x] Session-aware routing to skip onboarding when profile/role exists
 
 ### Feature Development
 - [ ] Build out the feed screen with real content (Supabase or API)
@@ -263,17 +305,29 @@ FeedScreen
 
 ### Polish & Optimization
 - [ ] Add app icons and splash screens
-- [ ] Implement proper error messages
-- [ ] Add onboarding progress indicator
+- [x] Implement proper error messages
+- [x] Add onboarding progress indicator
 - [ ] Optimize images and performance
 - [ ] Add analytics and monitoring
+
+### Recent Improvements
+- Startup guard: shows a config/error screen if `SUPABASE_URL`/`SUPABASE_ANON_KEY` are missing or Supabase init fails.
+- Auth state routing: listens to Supabase auth changes and routes to feed or onboarding based on profile role.
+- Loading UX: shared loading overlay + snackbars with retry across auth/onboarding; feed pagination now tracks `hasMore` to avoid infinite load-more.
+- Feed discovery: search bar + tag/type filters with role-aware “Personalized” tag, all executed server-side; filters/search persisted with reset action and role defaults.
+- Investor intros: request-intro action on investor cards posts to Supabase `contact_requests` (with RLS), including optional message and feed-item context.
+- Intro inbox: two-tab view for incoming/sent contact requests with accept/decline actions and status updates (requires the contact_requests update policy migration).
 
 ## Platform Support
 
 - ✅ iOS (tested on iPhone)
 - ✅ macOS (tested on Mac desktop)
-- ⏳ Android (platform files not yet added)
-- ⏳ Web (platform files not yet added)
+- ⏳ Android (enable with `flutter config --enable-android`; needs SDK/AVD setup)
+- ⏳ Web (project scaffold present in `web/`, not yet tested or supported; expect fixes)
+
+## Testing
+
+- Smoke tests: `flutter test` (widget harness checks startup config screen when Supabase is not ready)
 
 ## Development Notes
 

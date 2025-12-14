@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../app_config.dart';
 import '../services/supabase_service.dart';
 import '../theme/spacing.dart';
+import 'onboarding_progress.dart';
+import '../theme/snackbar.dart';
+import '../theme/loading_overlay.dart';
 
 class EndUserOnboardingScreen extends StatefulWidget {
   const EndUserOnboardingScreen({Key? key}) : super(key: key);
@@ -55,7 +58,8 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
       final hasInterest = _lookingFor.values.any((v) => v);
       if (!hasInterest) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Select at least one interest')),
+          const SnackBar(
+              content: Text('Pick at least one interest to tailor matches.')),
         );
         return;
       }
@@ -82,8 +86,10 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
       Navigator.pushReplacementNamed(context, '/feed');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save your details: $e')),
+      showErrorSnackBar(
+        context,
+        'Could not save your details. Check your connection and try again.',
+        onRetry: _saving ? null : _saveEndUser,
       );
       setState(() => _saving = false);
     }
@@ -99,128 +105,142 @@ class _EndUserOnboardingScreenState extends State<EndUserOnboardingScreen> {
         ),
         title: const Text('Your Details'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Tell us about your interests',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+      body: LoadingOverlay(
+        isLoading: _saving,
+        message: 'Saving your details...',
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                OnboardingProgress(
+                  currentStep: 3,
+                  totalSteps: 3,
+                  label: _saving ? 'Saving your details...' : 'Your interests',
                 ),
-              ),
-              const SizedBox(height: gapLG),
-              DropdownButtonFormField<String>(
-                initialValue: _mainRole,
-                decoration: const InputDecoration(
-                  labelText: 'Main Role *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.work),
-                ),
-                items: _roles
-                    .map((role) => DropdownMenuItem(
-                          value: role,
-                          child: Text(role),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _mainRole = value;
-                    });
-                  }
-                },
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Select a role';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: gapMD),
-              DropdownButtonFormField<String>(
-                initialValue: _experienceLevel,
-                decoration: const InputDecoration(
-                  labelText: 'Experience Level *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.bar_chart),
-                ),
-                items: _experienceLevels
-                    .map((level) => DropdownMenuItem(
-                          value: level,
-                          child: Text(level),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _experienceLevel = value;
-                    });
-                  }
-                },
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Select an experience level';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: gapLG),
-              const Text(
-                'What are you looking for?',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: gapSM),
-              ..._lookingFor.keys.map((interest) {
-                return CheckboxListTile(
-                  title: Text(interest),
-                  value: _lookingFor[interest],
-                  onChanged: (value) {
-                    setState(() {
-                      _lookingFor[interest] = value ?? false;
-                    });
-                  },
-                  contentPadding: EdgeInsets.zero,
-                );
-              }).toList(),
-              const SizedBox(height: gapXL),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _saving ? null : _handleBack,
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: const Text('Back'),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _saving ? null : _handleFinish,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: _saving
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Finish'),
-                    ),
-                  ),
+                if (_saving) ...[
+                  const SizedBox(height: gapSM),
+                  const LinearProgressIndicator(minHeight: 4),
                 ],
-              ),
-            ],
+                const SizedBox(height: gapLG),
+                const Text(
+                  'Tell us about your interests',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: gapLG),
+                DropdownButtonFormField<String>(
+                  initialValue: _mainRole,
+                  decoration: const InputDecoration(
+                    labelText: 'Main Role *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.work),
+                  ),
+                  items: _roles
+                      .map((role) => DropdownMenuItem(
+                            value: role,
+                            child: Text(role),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _mainRole = value;
+                      });
+                    }
+                  },
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Select your main role.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: gapMD),
+                DropdownButtonFormField<String>(
+                  initialValue: _experienceLevel,
+                  decoration: const InputDecoration(
+                    labelText: 'Experience Level *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.bar_chart),
+                  ),
+                  items: _experienceLevels
+                      .map((level) => DropdownMenuItem(
+                            value: level,
+                            child: Text(level),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _experienceLevel = value;
+                      });
+                    }
+                  },
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Select your experience level.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: gapLG),
+                const Text(
+                  'What are you looking for?',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: gapSM),
+                ..._lookingFor.keys.map((interest) {
+                  return CheckboxListTile(
+                    title: Text(interest),
+                    value: _lookingFor[interest],
+                    onChanged: (value) {
+                      setState(() {
+                        _lookingFor[interest] = value ?? false;
+                      });
+                    },
+                    contentPadding: EdgeInsets.zero,
+                  );
+                }).toList(),
+                const SizedBox(height: gapXL),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _saving ? null : _handleBack,
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: const Text('Back'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _saving ? null : _handleFinish,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: _saving
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Finish'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

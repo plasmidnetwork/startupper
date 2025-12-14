@@ -23,15 +23,25 @@
       ]
     },
     {
-      "name": "Flutter (Web - Open in Safari)",
+      "name": "Flutter (Web Server - Any Browser)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
+      "deviceId": "web-server",
       "toolArgs": [
         "--dart-define=SUPABASE_URL=https://xxwqsiluoajmqmkqbxai.supabase.co",
-        "--dart-define=SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4d3FzaWx1b2FqbXFta3FieGFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzODkwMjksImV4cCI6MjA3OTk2NTAyOX0.t7cK6saUKB9w_k2MVGyKQ-2Lf5q1oD1DKjtLmVwyBmY",
-        "-d",
-        "web-server"
+        "--dart-define=SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4d3FzaWx1b2FqbXFta3FieGFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzODkwMjksImV4cCI6MjA3OTk2NTAyOX0.t7cK6saUKB9w_k2MVGyKQ-2Lf5q1oD1DKjtLmVwyBmY"
+      ]
+    },
+    {
+      "name": "Flutter (Web - Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "chrome",
+      "toolArgs": [
+        "--dart-define=SUPABASE_URL=https://xxwqsiluoajmqmkqbxai.supabase.co",
+        "--dart-define=SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4d3FzaWx1b2FqbXFta3FieGFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzODkwMjksImV4cCI6MjA3OTk2NTAyOX0.t7cK6saUKB9w_k2MVGyKQ-2Lf5q1oD1DKjtLmVwyBmY"
       ]
     }
   ]

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../app_config.dart';
 import '../services/supabase_service.dart';
 import '../theme/spacing.dart';
+import 'onboarding_progress.dart';
+import '../theme/snackbar.dart';
+import '../theme/loading_overlay.dart';
 
 class FounderOnboardingScreen extends StatefulWidget {
   const FounderOnboardingScreen({Key? key}) : super(key: key);
@@ -90,8 +93,10 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
       Navigator.pushReplacementNamed(context, '/feed');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save founder details: $e')),
+      showErrorSnackBar(
+        context,
+        'Could not save your founder details. Check your connection and try again.',
+        onRetry: _saving ? null : _saveFounder,
       );
       setState(() => _saving = false);
     }
@@ -107,150 +112,164 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
         ),
         title: const Text('Founder Details'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Tell us about your startup',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+      body: LoadingOverlay(
+        isLoading: _saving,
+        message: 'Saving your details...',
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                OnboardingProgress(
+                  currentStep: 3,
+                  totalSteps: 3,
+                  label: _saving ? 'Saving your details...' : 'Founder details',
                 ),
-              ),
-              const SizedBox(height: gapLG),
-              TextFormField(
-                controller: _startupNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Startup Name *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.business),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Startup name is required';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: gapMD),
-              TextFormField(
-                controller: _pitchController,
-                decoration: const InputDecoration(
-                  labelText: 'One-liner Pitch *',
-                  hintText: 'Describe your startup in one sentence',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lightbulb),
-                ),
-                maxLines: 2,
-                maxLength: 300,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Pitch is required';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: gapMD),
-              DropdownButtonFormField<String>(
-                initialValue: _selectedStage,
-                decoration: const InputDecoration(
-                  labelText: 'Stage *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.trending_up),
-                ),
-                items: _stages
-                    .map((stage) => DropdownMenuItem(
-                          value: stage,
-                          child: Text(stage),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _selectedStage = value;
-                    });
-                  }
-                },
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Select a stage';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: gapLG),
-              const Text(
-                'What are you looking for?',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: gapSM),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _lookingFor.keys.map((item) {
-                  return FilterChip(
-                    label: Text(item),
-                    selected: _lookingFor[item]!,
-                    onSelected: (selected) {
-                      setState(() {
-                        _lookingFor[item] = selected;
-                      });
-                    },
-                    showCheckmark: false,
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: gapXL),
-              ProductDetailsSection(
-                isExpanded: _isProductDetailsExpanded,
-                onToggle: () {
-                  setState(() {
-                    _isProductDetailsExpanded = !_isProductDetailsExpanded;
-                  });
-                },
-                websiteController: _websiteController,
-                videoController: _videoController,
-                appStoreIdController: _appStoreIdController,
-                playStoreIdController: _playStoreIdController,
-              ),
-              const SizedBox(height: gapXL),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _saving ? null : _handleBack,
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: const Text('Back'),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _saving ? null : _handleFinish,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: _saving
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Finish'),
-                    ),
-                  ),
+                if (_saving) ...[
+                  const SizedBox(height: gapSM),
+                  const LinearProgressIndicator(minHeight: 4),
                 ],
-              ),
-            ],
+                const SizedBox(height: gapLG),
+                const Text(
+                  'Tell us about your startup',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: gapLG),
+                TextFormField(
+                  controller: _startupNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Startup Name *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.business),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Add your startup name.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: gapMD),
+                TextFormField(
+                  controller: _pitchController,
+                  decoration: const InputDecoration(
+                    labelText: 'One-liner Pitch *',
+                    hintText: 'Describe your startup in one sentence',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lightbulb),
+                  ),
+                  maxLines: 2,
+                  maxLength: 300,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Add a one-liner so investors know what you do.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: gapMD),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedStage,
+                  decoration: const InputDecoration(
+                    labelText: 'Stage *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.trending_up),
+                  ),
+                  items: _stages
+                      .map((stage) => DropdownMenuItem(
+                            value: stage,
+                            child: Text(stage),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _selectedStage = value;
+                      });
+                    }
+                  },
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Select your current stage.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: gapLG),
+                const Text(
+                  'What are you looking for?',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: gapSM),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _lookingFor.keys.map((item) {
+                    return FilterChip(
+                      label: Text(item),
+                      selected: _lookingFor[item]!,
+                      onSelected: (selected) {
+                        setState(() {
+                          _lookingFor[item] = selected;
+                        });
+                      },
+                      showCheckmark: false,
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: gapXL),
+                ProductDetailsSection(
+                  isExpanded: _isProductDetailsExpanded,
+                  onToggle: () {
+                    setState(() {
+                      _isProductDetailsExpanded = !_isProductDetailsExpanded;
+                    });
+                  },
+                  websiteController: _websiteController,
+                  videoController: _videoController,
+                  appStoreIdController: _appStoreIdController,
+                  playStoreIdController: _playStoreIdController,
+                ),
+                const SizedBox(height: gapXL),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _saving ? null : _handleBack,
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: const Text('Back'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _saving ? null : _handleFinish,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: _saving
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Finish'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

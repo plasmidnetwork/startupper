@@ -5,8 +5,11 @@ class SupabaseService {
   SupabaseClient get _client => Supabase.instance.client;
 
   User? get currentUser => _client.auth.currentUser;
+  Map<String, dynamic>? _profileCache;
 
-  Future<Map<String, dynamic>?> fetchProfile() async {
+  Future<Map<String, dynamic>?> fetchProfile({bool forceRefresh = false}) async {
+    if (!forceRefresh && _profileCache != null) return _profileCache;
+
     final user = currentUser;
     if (user == null) {
       throw StateError('No authenticated user');
@@ -16,7 +19,38 @@ class SupabaseService {
         .select('id, email, full_name, headline, location, role')
         .eq('id', user.id)
         .maybeSingle();
-    return res;
+    _profileCache = res;
+    return _profileCache;
+  }
+
+  Future<Map<String, dynamic>?> fetchRoleDetails(String role) async {
+    final user = currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user');
+    }
+    switch (role.toLowerCase()) {
+      case 'founder':
+        return _client
+            .from('founder_details')
+            .select()
+            .eq('user_id', user.id)
+            .maybeSingle();
+      case 'investor':
+        return _client
+            .from('investor_details')
+            .select()
+            .eq('user_id', user.id)
+            .maybeSingle();
+      case 'end-user':
+      case 'enduser':
+        return _client
+            .from('enduser_details')
+            .select()
+            .eq('user_id', user.id)
+            .maybeSingle();
+      default:
+        return null;
+    }
   }
 
   Future<void> upsertProfile({
@@ -47,17 +81,29 @@ class SupabaseService {
       'available_for_freelancing': availableForFreelancing,
       if (avatarUrl != null) 'avatar_url': avatarUrl,
     });
+
+    _profileCache = {
+      'id': user.id,
+      'email': user.email,
+      'full_name': fullName,
+      'headline': headline,
+      'location': location,
+      'role': role,
+      'available_for_freelancing': availableForFreelancing,
+      if (avatarUrl != null) 'avatar_url': avatarUrl,
+    };
   }
 
   Future<String> _uploadAvatar(String userId, File file) async {
     final ext = _fileExtension(file.path);
+    final contentType = _contentTypeForExtension(ext);
     // Path is relative to the bucket, so no need for 'avatars/' prefix
     // since the bucket is already named 'avatars'
     final path = '$userId.$ext';
     await _client.storage.from('avatars').upload(
           path,
           file,
-          fileOptions: const FileOptions(upsert: true),
+          fileOptions: FileOptions(upsert: true, contentType: contentType),
         );
     return _client.storage.from('avatars').getPublicUrl(path);
   }
@@ -130,5 +176,24 @@ class SupabaseService {
     final idx = path.lastIndexOf('.');
     if (idx == -1 || idx == path.length - 1) return 'jpg';
     return path.substring(idx + 1);
+  }
+
+  String _contentTypeForExtension(String ext) {
+    switch (ext.toLowerCase()) {
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'heic':
+        return 'image/heic';
+      case 'jpg':
+      case 'jpeg':
+      default:
+        return 'image/jpeg';
+    }
+  }
+
+  void clearProfileCache() {
+    _profileCache = null;
   }
 }

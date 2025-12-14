@@ -4,33 +4,75 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_models.dart';
 
+class FeedPage {
+  final List<FeedCardData> items;
+  final bool hasMore;
+
+  const FeedPage({required this.items, required this.hasMore});
+}
+
 class FeedRepository {
   final _client = Supabase.instance.client;
 
-  Future<List<FeedCardData>> fetchFeed({int offset = 0, int limit = 10}) async {
+  Future<FeedPage> fetchFeed({
+    int offset = 0,
+    int limit = 10,
+    String? search,
+    List<String>? tags,
+    List<FeedCardType>? types,
+  }) async {
     try {
-      final rows = await _client
-          .from('feed_items')
-          .select(
-              // Include avatar_url so we can display user profile images
-              'content, type, created_at, user:profiles(id, full_name, headline, role, avatar_url)')
+      final query = _client.from('feed_items').select(
+          // Include avatar_url so we can display user profile images
+          'id, content, type, created_at, user:profiles(id, full_name, headline, role, avatar_url)');
+
+      if (tags != null && tags.isNotEmpty) {
+        query.contains('content->tags', tags);
+      }
+
+      if (types != null && types.isNotEmpty) {
+        query.inFilter('type', types.map((t) => t.name).toList());
+      }
+
+      final trimmedSearch = search?.trim() ?? '';
+      if (trimmedSearch.isNotEmpty) {
+        final term = '%$trimmedSearch%';
+        query.or(
+            'content->>title.ilike.$term,content->>subtitle.ilike.$term,content->>ask.ilike.$term');
+      }
+
+      final rows = await query
           .order('created_at', ascending: false)
           .range(offset, offset + limit - 1);
 
       developer.log('FeedRepository.fetchFeed: fetched ${rows.length} rows',
           name: 'feed');
 
-      return rows
+      final items = rows
           .map<FeedCardData?>((row) => _mapRow(row))
           .whereType<FeedCardData>()
           .toList();
+      final hasMore = rows.length == limit;
+      return FeedPage(items: items, hasMore: hasMore);
     } catch (_) {
       rethrow;
     }
   }
 
-  Future<List<FeedCardData>> loadMore(int currentCount) {
-    return fetchFeed(offset: currentCount, limit: 10);
+  Future<FeedPage> loadMore(
+    int currentCount, {
+    int limit = 10,
+    String? search,
+    List<String>? tags,
+    List<FeedCardType>? types,
+  }) {
+    return fetchFeed(
+      offset: currentCount,
+      limit: limit,
+      search: search,
+      tags: tags,
+      types: types,
+    );
   }
 
   FeedCardData? _mapRow(Map<String, dynamic> row) {
@@ -50,6 +92,7 @@ class FeedRepository {
             ))
         .toList();
 
+    final authorId = user['id']?.toString();
     final authorName = user['full_name']?.toString();
     final authorRole = user['role']?.toString() ?? '';
     final authorAffiliation = user['headline']?.toString() ?? '';
@@ -62,9 +105,13 @@ class FeedRepository {
       name: 'feed',
     );
 
+    final feedId = row['id']?.toString() ?? '';
+
     return FeedCardData(
+      id: feedId,
       type: type,
       author: FeedAuthor(
+        id: authorId,
         name: authorName?.isNotEmpty == true ? authorName! : 'Member',
         role: authorRole.isNotEmpty ? authorRole : 'Member',
         affiliation: authorAffiliation,
@@ -110,8 +157,10 @@ class FeedRepository {
   }
 }
 
+// ignore: unused_element
 const _mockFeed = <FeedCardData>[
   FeedCardData(
+    id: 'mock1',
     type: FeedCardType.highlight,
     author: FeedAuthor(
       name: 'Lina Park',
@@ -130,6 +179,7 @@ const _mockFeed = <FeedCardData>[
     featured: true,
   ),
   FeedCardData(
+    id: 'mock2',
     type: FeedCardType.update,
     author: FeedAuthor(
       name: 'Amir Khan',
@@ -148,6 +198,7 @@ const _mockFeed = <FeedCardData>[
     ],
   ),
   FeedCardData(
+    id: 'mock3',
     type: FeedCardType.mission,
     author: FeedAuthor(
       name: 'Sofia Duarte',
@@ -162,6 +213,7 @@ const _mockFeed = <FeedCardData>[
     ask: 'Prefer B2B SaaS experience',
   ),
   FeedCardData(
+    id: 'mock4',
     type: FeedCardType.highlight,
     author: FeedAuthor(
       name: 'Kai Müller',
@@ -180,6 +232,7 @@ const _mockFeed = <FeedCardData>[
     featured: true,
   ),
   FeedCardData(
+    id: 'mock5',
     type: FeedCardType.investor,
     author: FeedAuthor(
       name: 'Amelia Cho',
@@ -194,6 +247,7 @@ const _mockFeed = <FeedCardData>[
     ask: 'Office hours this week',
   ),
   FeedCardData(
+    id: 'mock6',
     type: FeedCardType.update,
     author: FeedAuthor(
       name: 'Diego Rojas',
@@ -210,6 +264,7 @@ const _mockFeed = <FeedCardData>[
     ],
   ),
   FeedCardData(
+    id: 'mock7',
     type: FeedCardType.mission,
     author: FeedAuthor(
       name: 'Priya Nair',
@@ -225,6 +280,7 @@ const _mockFeed = <FeedCardData>[
     ask: 'Fintech ops / PMs preferred',
   ),
   FeedCardData(
+    id: 'mock8',
     type: FeedCardType.investor,
     author: FeedAuthor(
       name: 'Chen Wu',
@@ -239,6 +295,7 @@ const _mockFeed = <FeedCardData>[
     ask: 'Booking office hours next week',
   ),
   FeedCardData(
+    id: 'mock9',
     type: FeedCardType.update,
     author: FeedAuthor(
       name: 'Jade Ellis',
@@ -256,6 +313,7 @@ const _mockFeed = <FeedCardData>[
     ],
   ),
   FeedCardData(
+    id: 'mock10',
     type: FeedCardType.highlight,
     author: FeedAuthor(
       name: 'Marcos Silva',

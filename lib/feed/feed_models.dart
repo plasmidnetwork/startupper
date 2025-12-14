@@ -8,9 +8,11 @@ class FeedAuthor {
     required this.role,
     required this.affiliation,
     required this.timeAgo,
+    this.id,
     this.avatarUrl,
   });
 
+  final String? id;
   final String name;
   final String role;
   final String affiliation;
@@ -32,6 +34,7 @@ class MetricHighlight {
 
 class FeedCardData {
   const FeedCardData({
+    required this.id,
     required this.type,
     required this.author,
     required this.title,
@@ -45,6 +48,7 @@ class FeedCardData {
 
   final FeedCardType type;
   final FeedAuthor author;
+  final String id;
   final String title;
   final String subtitle;
   final String? ask;

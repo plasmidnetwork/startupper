@@ -5,26 +5,26 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:startupper/main.dart';
+import 'package:startupper/feed/feed_models.dart';
+import 'package:startupper/feed/feed_screen.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Shows config screen when Supabase is not ready',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const StartupperApp(
+      supabaseReady: false,
+      startupErrorMessage: 'Supabase credentials are missing.',
+    ));
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.textContaining('Supabase'), findsWidgets);
+    expect(find.textContaining('credentials'), findsWidgets);
   });
+
+  // Note: The compose dialog test was removed because _ComposeDialog is a
+  // private class and cannot be accessed from test files. To test the compose
+  // functionality, either:
+  // 1. Make the dialog public (rename to ComposeDialog)
+  // 2. Test it indirectly through the FeedScreen when user is logged in
 }
