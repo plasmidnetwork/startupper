@@ -50,12 +50,21 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
   void initState() {
     super.initState();
     _data = widget.initial;
+    _shouldFocusComment = widget.focusComments;
     if (_data != null) {
       _loading = false;
       _loadIntroStatus();
+      _loadComments();
     } else {
       _fetch();
     }
+  }
+
+  @override
+  void dispose() {
+    _commentCtrl.dispose();
+    _commentFocusNode.dispose();
+    super.dispose();
   }
 
   Future<void> _fetch() async {
@@ -75,6 +84,7 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
       });
       if (item != null) {
         _loadIntroStatus();
+        _loadComments();
       }
     } catch (_) {
       if (!mounted) return;
