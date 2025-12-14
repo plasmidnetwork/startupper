@@ -37,6 +37,14 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
   ContactRequestStatus? _introStatus;
   String? _copiedLink;
   ContactRequest? _introRequest;
+  List<FeedComment> _comments = [];
+  bool _commentsLoading = true;
+  String? _commentsError;
+  bool _postingComment = false;
+  final Map<String, bool> _deletingComment = {};
+  final TextEditingController _commentCtrl = TextEditingController();
+  final FocusNode _commentFocusNode = FocusNode();
+  bool _shouldFocusComment = false;
 
   @override
   void initState() {
