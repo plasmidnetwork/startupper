@@ -115,6 +115,95 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
     }
   }
 
+  Future<void> _loadComments() async {
+    setState(() {
+      _commentsLoading = true;
+      _commentsError = null;
+    });
+    try {
+      final items = await _service.fetchComments(widget.id);
+      if (!mounted) return;
+      setState(() {
+        _comments = items;
+        _commentsLoading = false;
+      });
+      if (_shouldFocusComment && mounted) {
+        _commentFocusNode.requestFocus();
+        _shouldFocusComment = false;
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _commentsLoading = false;
+        _commentsError = 'Could not load comments.';
+      });
+    }
+  }
+
+  Future<void> _postComment() async {
+    if (_postingComment) return;
+    final text = _commentCtrl.text.trim();
+    if (text.isEmpty) return;
+    setState(() => _postingComment = true);
+    try {
+      await _service.addComment(feedItemId: widget.id, body: text);
+      _commentCtrl.clear();
+      await _loadComments();
+    } catch (_) {
+      if (mounted) {
+        showErrorSnackBar(context, 'Could not post comment.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _postingComment = false);
+      }
+    }
+  }
+
+  Future<void> _deleteComment(FeedComment comment) async {
+    if (_deletingComment[comment.id] == true) return;
+    final confirm = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Delete comment?'),
+            content: const Text('This action cannot be undone.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirm) return;
+
+    setState(() {
+      _deletingComment[comment.id] = true;
+    });
+    try {
+      await _service.deleteComment(comment.id);
+      await _loadComments();
+      if (mounted) {
+        showSuccessSnackBar(context, 'Comment deleted');
+      }
+    } catch (_) {
+      if (mounted) {
+        showErrorSnackBar(context, 'Could not delete comment.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _deletingComment.remove(comment.id);
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
