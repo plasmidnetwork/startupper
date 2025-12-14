@@ -8,16 +8,19 @@ import 'feed_service.dart';
 import 'package:flutter/services.dart';
 import '../app_config.dart';
 import 'contact_request_models.dart';
+import 'comment_models.dart';
 
 class FeedItemScreen extends StatefulWidget {
   const FeedItemScreen({
     super.key,
     required this.id,
     this.initial,
+    this.focusComments = false,
   });
 
   final String id;
   final FeedCardData? initial;
+  final bool focusComments;
 
   @override
   State<FeedItemScreen> createState() => _FeedItemScreenState();
