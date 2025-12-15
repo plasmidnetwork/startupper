@@ -182,6 +182,8 @@ class _StartupperAppState extends State<StartupperApp> {
           bool focusComments = false;
           ContactRequestStatus? initialIntroStatus;
           bool initialIntroPending = false;
+          bool initialIsLiked = false;
+          int? initialLikeCount;
           if (args is Map) {
             id = args['id']?.toString();
             final raw = args['data'];
@@ -200,6 +202,14 @@ class _StartupperAppState extends State<StartupperApp> {
             if (introPendingArg is bool) {
               initialIntroPending = introPendingArg;
             }
+            final likedArg = args['isLiked'];
+            if (likedArg is bool) {
+              initialIsLiked = likedArg;
+            }
+            final likeCountArg = args['likeCountOverride'];
+            if (likeCountArg is int) {
+              initialLikeCount = likeCountArg;
+            }
           }
           if (id == null) {
             return const Scaffold(
@@ -212,6 +222,8 @@ class _StartupperAppState extends State<StartupperApp> {
             focusComments: focusComments,
             initialIntroStatus: initialIntroStatus,
             initialIntroPending: initialIntroPending,
+            initialIsLiked: initialIsLiked,
+            initialLikeCount: initialLikeCount,
           );
         },
       },

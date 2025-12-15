@@ -18,6 +18,8 @@ class FeedItemScreen extends StatefulWidget {
     this.focusComments = false,
     this.initialIntroStatus,
     this.initialIntroPending = false,
+    this.initialIsLiked = false,
+    this.initialLikeCount,
   });
 
   final String id;
@@ -25,6 +27,8 @@ class FeedItemScreen extends StatefulWidget {
   final bool focusComments;
   final ContactRequestStatus? initialIntroStatus;
   final bool initialIntroPending;
+  final bool initialIsLiked;
+  final int? initialLikeCount;
 
   @override
   State<FeedItemScreen> createState() => _FeedItemScreenState();
@@ -41,6 +45,8 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
   ContactRequestStatus? _introStatus;
   String? _copiedLink;
   ContactRequest? _introRequest;
+  bool _isLiked = false;
+  int? _likeOverride;
   List<FeedComment> _comments = [];
   bool _commentsLoading = true;
   String? _commentsError;
@@ -59,6 +65,8 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
     _introSent = widget.initialIntroPending ||
         (widget.initialIntroStatus != null &&
             widget.initialIntroStatus != ContactRequestStatus.declined);
+    _isLiked = widget.initialIsLiked;
+    _likeOverride = widget.initialLikeCount;
     if (_data != null) {
       _loading = false;
       _loadIntroStatus();
@@ -88,6 +96,8 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
         _loading = false;
         if (item == null) {
           _error = 'This feed item is not available.';
+        } else {
+          _likeOverride ??= item.likeCount;
         }
       });
       if (item != null) {
@@ -120,6 +130,33 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
       }
     } catch (_) {
       // ignore
+    }
+  }
+
+  Future<void> _handleLike() async {
+    if (_data == null) return;
+    final id = _data!.id;
+    final currentlyLiked = _isLiked;
+    final currentCount = _likeOverride ?? _data!.likeCount;
+    setState(() {
+      _isLiked = !currentlyLiked;
+      _likeOverride =
+          currentlyLiked ? (currentCount > 0 ? currentCount - 1 : 0) : currentCount + 1;
+    });
+    try {
+      if (currentlyLiked) {
+        await _service.unlikeFeedItem(id);
+      } else {
+        await _service.likeFeedItem(id);
+      }
+    } catch (_) {
+      setState(() {
+        _isLiked = currentlyLiked;
+        _likeOverride = currentCount;
+      });
+      if (mounted) {
+        showErrorSnackBar(context, 'Could not update like right now.');
+      }
     }
   }
 
@@ -290,6 +327,9 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
                               _introStatus == ContactRequestStatus.pending,
                           introStatus: _introStatus,
                           onAuthorTap: _openProfileSheet,
+                          onLike: _handleLike,
+                          isLiked: _isLiked,
+                          likeCountOverride: _likeOverride,
                           onComment: () {
                             _commentFocusNode.requestFocus();
                           },

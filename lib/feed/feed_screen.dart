@@ -477,6 +477,8 @@ class _FeedScreenState extends State<FeedScreen> {
             : null,
         'introPending': data.author.id != null &&
             _pendingIntroTargets.contains(data.author.id),
+        'isLiked': _likedIds.contains(data.id),
+        'likeCountOverride': _likeOverrides[data.id],
       },
     );
   }
