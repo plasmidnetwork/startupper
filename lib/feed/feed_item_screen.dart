@@ -16,11 +16,15 @@ class FeedItemScreen extends StatefulWidget {
     required this.id,
     this.initial,
     this.focusComments = false,
+    this.initialIntroStatus,
+    this.initialIntroPending = false,
   });
 
   final String id;
   final FeedCardData? initial;
   final bool focusComments;
+  final ContactRequestStatus? initialIntroStatus;
+  final bool initialIntroPending;
 
   @override
   State<FeedItemScreen> createState() => _FeedItemScreenState();
@@ -51,6 +55,10 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
     super.initState();
     _data = widget.initial;
     _shouldFocusComment = widget.focusComments;
+    _introStatus = widget.initialIntroStatus;
+    _introSent = widget.initialIntroPending ||
+        (widget.initialIntroStatus != null &&
+            widget.initialIntroStatus != ContactRequestStatus.declined);
     if (_data != null) {
       _loading = false;
       _loadIntroStatus();
@@ -278,6 +286,10 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
                       children: [
                         FeedCard(
                           data: _data!,
+                          introPending:
+                              _introStatus == ContactRequestStatus.pending,
+                          introStatus: _introStatus,
+                          onAuthorTap: _openProfileSheet,
                           onComment: () {
                             _commentFocusNode.requestFocus();
                           },
@@ -470,33 +482,18 @@ class _Actions extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        OutlinedButton(
-          onPressed: onOpenProfile,
-          child: const Text('Open profile'),
-        ),
-        if (canIntro) ...[
+        if (canIntro && !introSent) ...[
           const SizedBox(height: 8),
-          if (introSent)
-            Tooltip(
-              message: _chipLabel(introStatus),
-              child: Chip(
-                label: Text(_chipLabel(introStatus)),
-                visualDensity: VisualDensity.compact,
-                backgroundColor:
-                    _introChipColor(introStatus, Theme.of(context)),
-              ),
-            )
-          else
-            ElevatedButton(
-              onPressed: sendingIntro ? null : onRequestIntro,
-              child: sendingIntro
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Request intro'),
-            ),
+          ElevatedButton(
+            onPressed: sendingIntro ? null : onRequestIntro,
+            child: sendingIntro
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Request intro'),
+          ),
         ],
       ],
     );

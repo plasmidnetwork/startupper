@@ -31,9 +31,7 @@ class _FeedScreenState extends State<FeedScreen> {
   final Set<String> _pendingIntroTargets = {};
   final Map<String, ContactRequestStatus> _introStatusByTarget = {};
   final Set<String> _likedIds = {};
-  final Set<String> _repostedIds = {};
   final Map<String, int> _likeOverrides = {};
-  final Map<String, int> _repostOverrides = {};
   bool _loading = true;
   bool _refreshing = false;
   bool _loadingMore = false;
@@ -73,8 +71,8 @@ class _FeedScreenState extends State<FeedScreen> {
     try {
       final sent = await _feedService.fetchContactRequests(outgoing: true);
       if (!mounted) return;
-      final targets = sent
-          .where((r) => r.status != ContactRequestStatus.declined)
+      final pendingTargets = sent
+          .where((r) => r.status == ContactRequestStatus.pending)
           .map((r) => r.target.id)
           .where((id) => id.isNotEmpty)
           .toSet();
@@ -87,7 +85,7 @@ class _FeedScreenState extends State<FeedScreen> {
       setState(() {
         _pendingIntroTargets
           ..clear()
-          ..addAll(targets);
+          ..addAll(pendingTargets);
         _introStatusByTarget
           ..clear()
           ..addAll(statusMap);
@@ -470,7 +468,16 @@ class _FeedScreenState extends State<FeedScreen> {
     Navigator.pushNamed(
       context,
       '/feed/item',
-      arguments: {'id': data.id, 'data': data, 'focusComments': focusComments},
+      arguments: {
+        'id': data.id,
+        'data': data,
+        'focusComments': focusComments,
+        'introStatus': data.author.id != null
+            ? _introStatusByTarget[data.author.id!]
+            : null,
+        'introPending': data.author.id != null &&
+            _pendingIntroTargets.contains(data.author.id),
+      },
     );
   }
 
@@ -545,36 +552,6 @@ class _FeedScreenState extends State<FeedScreen> {
       });
       if (mounted) {
         showErrorSnackBar(context, 'Could not update like right now.');
-      }
-    }
-  }
-
-  void _handleRepost(FeedCardData data) async {
-    final id = data.id;
-    if (id.isEmpty) return;
-    if (_repostedIds.contains(id)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You already reposted this')),
-        );
-      }
-      return;
-    }
-    final currentCount = _repostOverrides[id] ?? data.repostCount;
-    setState(() {
-      _repostedIds.add(id);
-      _repostOverrides[id] = currentCount + 1;
-    });
-    try {
-      await _feedService.repostFeedItem(id);
-    } catch (_) {
-      // Revert
-      setState(() {
-        _repostedIds.remove(id);
-        _repostOverrides[id] = currentCount;
-      });
-      if (mounted) {
-        showErrorSnackBar(context, 'Could not repost right now.');
       }
     }
   }
@@ -820,15 +797,15 @@ class _FeedScreenState extends State<FeedScreen> {
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
                         final item = _items[index];
-                        final introPending = item.author.id != null &&
-                            _pendingIntroTargets.contains(item.author.id);
                         final introStatus = item.author.id != null
                             ? _introStatusByTarget[item.author.id!]
                             : null;
+                        final introPending = introStatus == ContactRequestStatus.pending ||
+                            (introStatus == null &&
+                                item.author.id != null &&
+                                _pendingIntroTargets.contains(item.author.id));
                         final likeCount =
                             _likeOverrides[item.id] ?? item.likeCount;
-                        final repostCount =
-                            _repostOverrides[item.id] ?? item.repostCount;
                         final isLiked = _likedIds.contains(item.id);
                         return Padding(
                           padding: EdgeInsets.fromLTRB(
@@ -850,10 +827,8 @@ class _FeedScreenState extends State<FeedScreen> {
                                 _openFeedDetail(item, focusComments: true),
                             onIntroStatusTap: () => _openIntros(initialTab: 1),
                             onLike: () => _handleLike(item),
-                            onRepost: () => _handleRepost(item),
                             isLiked: isLiked,
                             likeCountOverride: likeCount,
-                            repostCountOverride: repostCount,
                           ),
                         );
                       },
@@ -1055,10 +1030,8 @@ class FeedCard extends StatelessWidget {
     this.onIntroStatusTap,
     this.onComment,
     this.onLike,
-    this.onRepost,
     this.isLiked = false,
     this.likeCountOverride,
-    this.repostCountOverride,
   }) : super(key: key);
 
   final FeedCardData data;
@@ -1070,10 +1043,8 @@ class FeedCard extends StatelessWidget {
   final VoidCallback? onIntroStatusTap;
   final VoidCallback? onComment;
   final VoidCallback? onLike;
-  final VoidCallback? onRepost;
   final bool isLiked;
   final int? likeCountOverride;
-  final int? repostCountOverride;
 
   @override
   Widget build(BuildContext context) {
@@ -1085,10 +1056,8 @@ class FeedCard extends StatelessWidget {
           onTap: onTap,
           onComment: onComment,
           onLike: onLike,
-          onRepost: onRepost,
           isLiked: isLiked,
           likeCountOverride: likeCountOverride,
-          repostCountOverride: repostCountOverride,
         );
       case FeedCardType.mission:
         return _MissionCard(
@@ -1096,10 +1065,8 @@ class FeedCard extends StatelessWidget {
           onAuthorTap: onAuthorTap,
           onTap: onTap,
           onLike: onLike,
-          onRepost: onRepost,
           isLiked: isLiked,
           likeCountOverride: likeCountOverride,
-          repostCountOverride: repostCountOverride,
         );
       case FeedCardType.investor:
         return _InvestorCard(
@@ -1112,10 +1079,8 @@ class FeedCard extends StatelessWidget {
           onTap: onTap,
           onComment: onComment,
           onLike: onLike,
-          onRepost: onRepost,
           isLiked: isLiked,
           likeCountOverride: likeCountOverride,
-          repostCountOverride: repostCountOverride,
         );
       case FeedCardType.update:
         return _UpdateCard(
@@ -1124,77 +1089,122 @@ class FeedCard extends StatelessWidget {
           onTap: onTap,
           onComment: onComment,
           onLike: onLike,
-          onRepost: onRepost,
           isLiked: isLiked,
           likeCountOverride: likeCountOverride,
-          repostCountOverride: repostCountOverride,
         );
     }
   }
 }
 
+Widget _linkedCardShell(
+  BuildContext context, {
+  required Widget child,
+  EdgeInsets padding = const EdgeInsets.all(16),
+  double radius = 14,
+}) {
+  final theme = Theme.of(context);
+  final borderColor = theme.colorScheme.outlineVariant.withOpacity(0.45);
+
+  return Card(
+    margin: const EdgeInsets.symmetric(vertical: 8),
+    color: theme.colorScheme.surface,
+    elevation: 0,
+    clipBehavior: Clip.antiAlias,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(radius),
+      side: BorderSide(color: borderColor),
+    ),
+    child: Padding(
+      padding: padding,
+      child: child,
+    ),
+  );
+}
+
 class _UpdateCard extends StatelessWidget {
   const _UpdateCard(
-      {required this.data, this.onAuthorTap, this.onTap, this.onComment, this.onLike, this.onRepost, this.isLiked = false, this.likeCountOverride, this.repostCountOverride});
+      {required this.data, this.onAuthorTap, this.onTap, this.onComment, this.onLike, this.isLiked = false, this.likeCountOverride});
 
   final FeedCardData data;
   final VoidCallback? onAuthorTap;
   final VoidCallback? onTap;
   final VoidCallback? onComment;
   final VoidCallback? onLike;
-  final VoidCallback? onRepost;
   final bool isLiked;
   final int? likeCountOverride;
-  final int? repostCountOverride;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = _roleAccent(data.author.role, theme);
     final likeCount = likeCountOverride ?? data.likeCount;
-    final repostCount = repostCountOverride ?? data.repostCount;
-    final card = Card(
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _PostHeader(author: data.author, onTap: onAuthorTap),
-            const SizedBox(height: 12),
+    final card = _linkedCardShell(
+      context,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _PostHeader(author: data.author, onTap: onAuthorTap),
+          const SizedBox(height: 12),
+          if (data.title.isNotEmpty) ...[
             Text(
-              data.subtitle,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(height: 1.4, fontSize: 15),
+              data.title,
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
-            if (data.metrics.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              MetricPills(metrics: data.metrics),
-            ],
-            if (data.ask != null) ...[
-              const SizedBox(height: 8),
-              _AskChip(label: data.ask!),
-            ],
             const SizedBox(height: 8),
-            _EngagementCounts(
-              likeCount: data.likeCount,
-              commentCount: data.commentCount,
-              repostCount: data.repostCount,
-              accent: accent,
-            ),
-            const SizedBox(height: 12),
-            ActionBar(
-              accent: accent,
-              onComment: onComment,
-              commentCount: data.commentCount,
-              onLike: onLike,
-              onRepost: onRepost,
-              isLiked: isLiked,
+          ],
+          Text(
+            data.subtitle,
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(height: 1.4, fontSize: 15),
+          ),
+          if (data.tags.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: data.tags
+                  .map(
+                    (tag) => Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        '#$tag',
+                        style: theme.textTheme.labelLarge
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  )
+                  .toList(),
             ),
           ],
-        ),
+          if (data.metrics.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            MetricPills(metrics: data.metrics),
+          ],
+          if (data.ask != null) ...[
+            const SizedBox(height: 10),
+            _AskChip(label: data.ask!),
+          ],
+          const SizedBox(height: 14),
+          _EngagementCounts(
+            likeCount: likeCount,
+            commentCount: data.commentCount,
+            accent: accent,
+          ),
+          const Divider(height: 24),
+          ActionBar(
+            accent: accent,
+            onComment: onComment,
+            commentCount: data.commentCount,
+            onLike: onLike,
+            isLiked: isLiked,
+          ),
+        ],
       ),
     );
     if (onTap == null) return card;
@@ -1208,90 +1218,86 @@ class _UpdateCard extends StatelessWidget {
 
 class _HighlightCard extends StatelessWidget {
   const _HighlightCard(
-      {required this.data, this.onAuthorTap, this.onTap, this.onComment, this.onLike, this.onRepost, this.isLiked = false, this.likeCountOverride, this.repostCountOverride});
+      {required this.data, this.onAuthorTap, this.onTap, this.onComment, this.onLike, this.isLiked = false, this.likeCountOverride});
 
   final FeedCardData data;
   final VoidCallback? onAuthorTap;
   final VoidCallback? onTap;
   final VoidCallback? onComment;
   final VoidCallback? onLike;
-  final VoidCallback? onRepost;
   final bool isLiked;
   final int? likeCountOverride;
-  final int? repostCountOverride;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = _roleAccent(data.author.role, theme);
     final likeCount = likeCountOverride ?? data.likeCount;
-    final repostCount = repostCountOverride ?? data.repostCount;
 
-    final card = Card(
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 3,
+    final card = _linkedCardShell(
+      context,
+      radius: 16,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _PostHeader(author: data.author, onTap: onAuthorTap),
-                const SizedBox(height: 10),
-                Text(
-                  data.title,
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  data.subtitle,
-                  style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
-                ),
-                if (data.tags.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: data.tags
-                        .map((tag) => Chip(
-                              label: Text('#$tag'),
-                              visualDensity: VisualDensity.compact,
-                              backgroundColor:
-                                  theme.colorScheme.surfaceContainerHighest,
-                            ))
-                        .toList(),
-                  ),
-                ],
-                if (data.ask != null) ...[
-                  const SizedBox(height: 10),
-                  _AskChip(label: data.ask!),
-                ],
-                if (data.metrics.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  MetricPills(metrics: data.metrics),
-                ],
-                const SizedBox(height: 10),
-                _EngagementCounts(
-                  likeCount: likeCount,
-                  commentCount: data.commentCount,
-                  repostCount: repostCount,
-                  accent: accent,
-                ),
-                const SizedBox(height: 10),
-                ActionBar(
-                  accent: accent,
-                  onComment: onComment,
-                  commentCount: data.commentCount,
-                  onLike: onLike,
-                  onRepost: onRepost,
-                  isLiked: isLiked,
-                ),
-              ],
+          _PostHeader(author: data.author, onTap: onAuthorTap),
+          const SizedBox(height: 12),
+          Text(
+            data.title,
+            style:
+                theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            data.subtitle,
+            style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+          ),
+          if (data.tags.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: data.tags
+                  .map(
+                    (tag) => Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        '#$tag',
+                        style: theme.textTheme.labelLarge
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  )
+                  .toList(),
             ),
+          ],
+          if (data.ask != null) ...[
+            const SizedBox(height: 10),
+            _AskChip(label: data.ask!),
+          ],
+          if (data.metrics.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            MetricPills(metrics: data.metrics),
+          ],
+          const SizedBox(height: 12),
+          _EngagementCounts(
+            likeCount: likeCount,
+            commentCount: data.commentCount,
+            accent: accent,
+          ),
+          const Divider(height: 24),
+          ActionBar(
+            accent: accent,
+            onComment: onComment,
+            commentCount: data.commentCount,
+            onLike: onLike,
+            isLiked: isLiked,
           ),
         ],
       ),
@@ -1311,90 +1317,89 @@ class _MissionCard extends StatelessWidget {
     this.onAuthorTap,
     this.onTap,
     this.onLike,
-    this.onRepost,
     this.isLiked = false,
     this.likeCountOverride,
-    this.repostCountOverride,
   });
 
   final FeedCardData data;
   final VoidCallback? onAuthorTap;
   final VoidCallback? onTap;
   final VoidCallback? onLike;
-  final VoidCallback? onRepost;
   final bool isLiked;
   final int? likeCountOverride;
-  final int? repostCountOverride;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = _roleAccent(data.author.role, theme);
     final likeCount = likeCountOverride ?? data.likeCount;
-    final repostCount = repostCountOverride ?? data.repostCount;
 
-    final card = Card(
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _PostHeader(author: data.author, onTap: onAuthorTap),
+    final card = _linkedCardShell(
+      context,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _PostHeader(author: data.author, onTap: onAuthorTap),
+          const SizedBox(height: 10),
+          Text(
+            data.title,
+            style:
+                theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            data.subtitle,
+            style: theme.textTheme.bodyMedium,
+          ),
+          if (data.tags.isNotEmpty) ...[
             const SizedBox(height: 10),
-            Text(
-              data.title,
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              data.subtitle,
-              style: theme.textTheme.bodyMedium,
-            ),
-            if (data.tags.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: data.tags
-                    .map((tag) => Chip(
-                          label: Text(tag),
-                          backgroundColor:
-                              theme.colorScheme.surfaceContainerHighest,
-                          visualDensity: VisualDensity.compact,
-                        ))
-                    .toList(),
-              ),
-            ],
-            const SizedBox(height: 12),
-            _EngagementCounts(
-              likeCount: likeCount,
-              commentCount: data.commentCount,
-              repostCount: repostCount,
-              accent: accent,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content: Text('Mission claimed: ${data.title}')),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: data.tags
+                  .map(
+                    (tag) => Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        tag,
+                        style: theme.textTheme.labelLarge
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
                     ),
-                    child: const Text('Claim'),
+                  )
+                  .toList(),
+            ),
+          ],
+          const SizedBox(height: 12),
+          _EngagementCounts(
+            likeCount: likeCount,
+            commentCount: data.commentCount,
+            accent: accent,
+          ),
+          const Divider(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Mission claimed: ${data.title}')),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
+                  child: const Text('Claim'),
                 ),
-                const SizedBox(width: 12),
-                OutlinedButton(
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton(
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Mission saved')),
@@ -1405,19 +1410,18 @@ class _MissionCard extends StatelessWidget {
                   ),
                   child: const Text('Save'),
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            ActionBar(
-              accent: accent,
-              onComment: null,
-              commentCount: data.commentCount,
-              onLike: onLike,
-              onRepost: onRepost,
-              isLiked: isLiked,
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ActionBar(
+            accent: accent,
+            onComment: null,
+            commentCount: data.commentCount,
+            onLike: onLike,
+            isLiked: isLiked,
+          ),
+        ],
       ),
     );
     if (onTap == null) return card;
@@ -1440,10 +1444,8 @@ class _InvestorCard extends StatefulWidget {
     this.onIntroStatusTap,
     this.onComment,
     this.onLike,
-    this.onRepost,
     this.isLiked = false,
     this.likeCountOverride,
-    this.repostCountOverride,
   });
 
   final FeedCardData data;
@@ -1455,10 +1457,8 @@ class _InvestorCard extends StatefulWidget {
   final VoidCallback? onIntroStatusTap;
   final VoidCallback? onComment;
   final VoidCallback? onLike;
-  final VoidCallback? onRepost;
   final bool isLiked;
   final int? likeCountOverride;
-  final int? repostCountOverride;
 
   @override
   State<_InvestorCard> createState() => _InvestorCardState();
@@ -1471,13 +1471,18 @@ class _InvestorCardState extends State<_InvestorCard> {
   @override
   void initState() {
     super.initState();
-    _introSent = widget.introPending;
+    _introSent = widget.introPending ||
+        (widget.introStatus != null &&
+            widget.introStatus != ContactRequestStatus.declined);
   }
 
   @override
   void didUpdateWidget(covariant _InvestorCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.introPending && !_introSent) {
+    final hasIntro = widget.introPending ||
+        (widget.introStatus != null &&
+            widget.introStatus != ContactRequestStatus.declined);
+    if (hasIntro && !_introSent) {
       setState(() {
         _introSent = true;
       });
@@ -1525,116 +1530,109 @@ class _InvestorCardState extends State<_InvestorCard> {
     final accent = _roleAccent(data.author.role, theme);
     final disabled = _requesting || _introSent || widget.introPending;
     final likeCount = widget.likeCountOverride ?? data.likeCount;
-    final repostCount = widget.repostCountOverride ?? data.repostCount;
 
-    final card = Card(
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _PostHeader(author: data.author, onTap: widget.onAuthorTap),
-            if (widget.introPending || _introSent || widget.introStatus != null) ...[
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: widget.onIntroStatusTap,
-                child: Chip(
-                  label: Text(_chipLabel(widget.introStatus)),
-                  visualDensity: VisualDensity.compact,
-                  backgroundColor: _chipColor(widget.introStatus, accent),
-                  labelStyle: theme.textTheme.labelMedium
-                      ?.copyWith(color: accent, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
+    final card = _linkedCardShell(
+      context,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _PostHeader(author: data.author, onTap: widget.onAuthorTap),
+          const SizedBox(height: 10),
+          Text(
+            data.title,
+            style:
+                theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            data.subtitle,
+            style: theme.textTheme.bodyMedium,
+          ),
+          if (data.tags.isNotEmpty) ...[
             const SizedBox(height: 10),
-            Text(
-              data.title,
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              data.subtitle,
-              style: theme.textTheme.bodyMedium,
-            ),
-            if (data.tags.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: data.tags
-                    .map((tag) => Chip(
-                          label: Text(tag),
-                          backgroundColor: accent.withValues(alpha: 0.12),
-                          visualDensity: VisualDensity.compact,
-                        ))
-                    .toList(),
-              ),
-            ],
-            if (data.ask != null) ...[
-              const SizedBox(height: 10),
-              _AskChip(label: data.ask!),
-            ],
-            const SizedBox(height: 12),
-            _EngagementCounts(
-              likeCount: likeCount,
-              commentCount: data.commentCount,
-              repostCount: repostCount,
-              accent: accent,
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: disabled ? null : _handleRequestIntro,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 12,
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: data.tags
+                  .map(
+                    (tag) => Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        tag,
+                        style: theme.textTheme.labelLarge
+                            ?.copyWith(fontWeight: FontWeight.w600, color: accent),
                       ),
                     ),
-                    child: _requesting
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(disabled ? 'Intro sent' : 'Request intro'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('One-pager shared')),
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
+                  )
+                  .toList(),
+            ),
+          ],
+        if (data.ask != null) ...[
+          const SizedBox(height: 10),
+          _AskChip(label: data.ask!),
+        ],
+        const SizedBox(height: 12),
+        _EngagementCounts(
+          likeCount: likeCount,
+          commentCount: data.commentCount,
+          accent: accent,
+        ),
+        const Divider(height: 24),
+        Row(
+          children: [
+            if (!disabled) ...[
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _handleRequestIntro,
+                  style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 18,
                       vertical: 12,
                     ),
                   ),
-                  child: const Text('Share'),
+                  child: _requesting
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Request intro'),
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            ActionBar(
-              accent: accent,
-              onComment: widget.onComment,
-              commentCount: data.commentCount,
-              onLike: widget.onLike,
-              onRepost: widget.onRepost,
-              isLiked: widget.isLiked,
+              ),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('One-pager shared')),
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 12,
+                  ),
+                ),
+                child: const Text('Share'),
+              ),
             ),
           ],
         ),
+        const SizedBox(height: 10),
+        ActionBar(
+          accent: accent,
+          onComment: widget.onComment,
+          commentCount: data.commentCount,
+          onLike: widget.onLike,
+            isLiked: widget.isLiked,
+          ),
+        ],
       ),
     );
     if (widget.onTap == null) return card;
@@ -1764,7 +1762,41 @@ class _PostHeader extends StatelessWidget {
         IconButton(
           icon: const Icon(Icons.more_horiz),
           tooltip: 'More',
-          onPressed: () {},
+          onPressed: () {
+            showModalBottomSheet(
+              context: context,
+              showDragHandle: true,
+              builder: (context) {
+                return SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.volume_off),
+                        title: const Text('Mute author'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Author muted (placeholder)')),
+                          );
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.flag_outlined),
+                        title: const Text('Report'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Report submitted (placeholder)')),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
         ),
       ],
     );
@@ -1829,7 +1861,6 @@ class ActionBar extends StatelessWidget {
     this.onComment,
     this.commentCount,
     this.onLike,
-    this.onRepost,
     this.isLiked = false,
   }) : super(key: key);
 
@@ -1837,51 +1868,52 @@ class ActionBar extends StatelessWidget {
   final VoidCallback? onComment;
   final int? commentCount;
   final VoidCallback? onLike;
-  final VoidCallback? onRepost;
   final bool isLiked;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Wrap(
-      spacing: 8,
-      runSpacing: 6,
+    final baseColor = theme.colorScheme.onSurfaceVariant;
+    final likeColor = isLiked ? accent : baseColor;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _ActionButton(
-          icon: Icons.thumb_up_off_alt_outlined,
-          label: isLiked ? 'Liked' : 'Like',
-          accent: accent,
-          onTap: onLike,
+        Expanded(
+          child: _ActionButton(
+            icon: isLiked ? Icons.thumb_up : Icons.thumb_up_off_alt_outlined,
+            label: isLiked ? 'Liked' : 'Like',
+            accent: likeColor,
+            onTap: onLike,
+            filled: isLiked,
+          ),
         ),
-        _ActionButton(
-          icon: Icons.chat_bubble_outline,
-          label: commentCount != null ? 'Comment · ${commentCount!}' : 'Comment',
-          accent: accent,
-          onTap: () {
-            if (onComment != null) {
-              onComment!();
-              return;
-            }
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Comments coming soon')),
-            );
-          },
+        Expanded(
+          child: _ActionButton(
+            icon: Icons.chat_bubble_outline,
+            label: 'Comment',
+            accent: baseColor,
+            onTap: () {
+              if (onComment != null) {
+                onComment!();
+                return;
+              }
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Comments coming soon')),
+              );
+            },
+          ),
         ),
-        _ActionButton(
-          icon: Icons.repeat,
-          label: 'Repost',
-          accent: accent,
-          onTap: onRepost,
-        ),
-        _ActionButton(
-          icon: Icons.send_outlined,
-          label: 'Send',
-          accent: accent,
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Shared via message')),
-            );
-          },
+        Expanded(
+          child: _ActionButton(
+            icon: Icons.send_outlined,
+            label: 'Send',
+            accent: baseColor,
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Shared via message')),
+              );
+            },
+          ),
         ),
       ],
     );
@@ -1906,17 +1938,24 @@ class _ActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final color = filled ? accent : theme.colorScheme.onSurfaceVariant;
+
     return TextButton.icon(
       onPressed: onTap,
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        minimumSize: const Size(0, 42),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
       icon: Icon(
         icon,
         size: 18,
-        color: filled ? accent : accent.withValues(alpha: 0.9),
+        color: color,
       ),
       label: Text(
         label,
-        style: theme.textTheme.labelLarge
-            ?.copyWith(color: filled ? accent : accent.withValues(alpha: 0.9)),
+        style: theme.textTheme.labelLarge?.copyWith(color: color),
       ),
     );
   }
@@ -1926,44 +1965,50 @@ class _EngagementCounts extends StatelessWidget {
   const _EngagementCounts({
     required this.likeCount,
     required this.commentCount,
-    required this.repostCount,
     required this.accent,
   });
 
   final int likeCount;
   final int commentCount;
-  final int repostCount;
   final Color accent;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Wrap(
-      spacing: 12,
-      runSpacing: 6,
-      crossAxisAlignment: WrapCrossAlignment.center,
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final commentLabel =
+        '$commentCount comment${commentCount == 1 ? '' : 's'}';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.thumb_up_alt, size: 16, color: accent),
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: accent.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.thumb_up_alt, size: 14, color: accent),
+            ),
             const SizedBox(width: 6),
             Text(
               likeCount.toString(),
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurface),
+              style: theme.textTheme.bodyMedium?.copyWith(color: muted),
             ),
           ],
         ),
-        Text(
-          '${commentCount.toString()} comments',
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(color: theme.colorScheme.onSurface),
-        ),
-        Text(
-          '${repostCount.toString()} reposts',
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(color: theme.colorScheme.onSurface),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              commentLabel,
+              style:
+                  theme.textTheme.bodyMedium?.copyWith(color: muted, height: 1),
+            ),
+          ),
         ),
       ],
     );

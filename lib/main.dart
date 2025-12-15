@@ -15,6 +15,7 @@ import 'profile/profile_screen.dart';
 import 'feed/contact_requests_screen.dart';
 import 'feed/feed_item_screen.dart';
 import 'feed/feed_models.dart';
+import 'feed/contact_request_models.dart';
 import 'startups/startup_discovery_screen.dart';
 
 Future<void> main() async {
@@ -179,6 +180,8 @@ class _StartupperAppState extends State<StartupperApp> {
           String? id;
           FeedCardData? data;
           bool focusComments = false;
+          ContactRequestStatus? initialIntroStatus;
+          bool initialIntroPending = false;
           if (args is Map) {
             id = args['id']?.toString();
             final raw = args['data'];
@@ -188,6 +191,14 @@ class _StartupperAppState extends State<StartupperApp> {
             final fc = args['focusComments'];
             if (fc is bool) {
               focusComments = fc;
+            }
+            final introStatusArg = args['introStatus'];
+            if (introStatusArg is ContactRequestStatus) {
+              initialIntroStatus = introStatusArg;
+            }
+            final introPendingArg = args['introPending'];
+            if (introPendingArg is bool) {
+              initialIntroPending = introPendingArg;
             }
           }
           if (id == null) {
@@ -199,6 +210,8 @@ class _StartupperAppState extends State<StartupperApp> {
             id: id,
             initial: data,
             focusComments: focusComments,
+            initialIntroStatus: initialIntroStatus,
+            initialIntroPending: initialIntroPending,
           );
         },
       },
