@@ -253,4 +253,16 @@ class FeedService {
     if (userId == null) throw StateError('User not signed in');
     await _client.rpc('increment_feed_repost', params: {'p_id': feedItemId});
   }
+
+  Future<void> deleteFeedItem(String feedItemId) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('User not signed in');
+    }
+    await _client
+        .from('feed_items')
+        .delete()
+        .eq('id', feedItemId)
+        .eq('user_id', userId);
+  }
 }

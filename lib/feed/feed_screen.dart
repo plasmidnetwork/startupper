@@ -95,6 +95,27 @@ class _FeedScreenState extends State<FeedScreen> {
     }
   }
 
+  Future<void> _deleteFeedItem(FeedCardData data) async {
+    final originalItems = List<FeedCardData>.from(_items);
+    setState(() {
+      _items.removeWhere((i) => i.id == data.id);
+      _likeOverrides.remove(data.id);
+      _likedIds.remove(data.id);
+    });
+    try {
+      await _feedService.deleteFeedItem(data.id);
+      if (mounted) {
+        showSuccessSnackBar(context, 'Post deleted');
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _items = originalItems;
+      });
+      showErrorSnackBar(context, 'Could not delete post right now.');
+    }
+  }
+
   Future<void> _openAuthorProfile(FeedAuthor author) async {
     final isIntroDisabled = author.id != null &&
         author.id!.isNotEmpty &&
@@ -868,6 +889,7 @@ class _FeedScreenState extends State<FeedScreen> {
                             onLike: () => _handleLike(item),
                             isLiked: isLiked,
                             likeCountOverride: likeCount,
+                            onDelete: () => _deleteFeedItem(item),
                           ),
                         );
                       },
@@ -1071,6 +1093,7 @@ class FeedCard extends StatelessWidget {
     this.onLike,
     this.isLiked = false,
     this.likeCountOverride,
+    this.onDelete,
   }) : super(key: key);
 
   final FeedCardData data;
@@ -1084,6 +1107,7 @@ class FeedCard extends StatelessWidget {
   final VoidCallback? onLike;
   final bool isLiked;
   final int? likeCountOverride;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1097,6 +1121,7 @@ class FeedCard extends StatelessWidget {
           onLike: onLike,
           isLiked: isLiked,
           likeCountOverride: likeCountOverride,
+          onDelete: onDelete,
         );
       case FeedCardType.mission:
         return _MissionCard(
@@ -1106,6 +1131,7 @@ class FeedCard extends StatelessWidget {
           onLike: onLike,
           isLiked: isLiked,
           likeCountOverride: likeCountOverride,
+          onDelete: onDelete,
         );
       case FeedCardType.investor:
         return _InvestorCard(
@@ -1120,6 +1146,7 @@ class FeedCard extends StatelessWidget {
           onLike: onLike,
           isLiked: isLiked,
           likeCountOverride: likeCountOverride,
+          onDelete: onDelete,
         );
       case FeedCardType.update:
         return _UpdateCard(
@@ -1130,6 +1157,7 @@ class FeedCard extends StatelessWidget {
           onLike: onLike,
           isLiked: isLiked,
           likeCountOverride: likeCountOverride,
+          onDelete: onDelete,
         );
     }
   }
@@ -1162,7 +1190,7 @@ Widget _linkedCardShell(
 
 class _UpdateCard extends StatelessWidget {
   const _UpdateCard(
-      {required this.data, this.onAuthorTap, this.onTap, this.onComment, this.onLike, this.isLiked = false, this.likeCountOverride});
+      {required this.data, this.onAuthorTap, this.onTap, this.onComment, this.onLike, this.isLiked = false, this.likeCountOverride, this.onDelete});
 
   final FeedCardData data;
   final VoidCallback? onAuthorTap;
@@ -1171,6 +1199,7 @@ class _UpdateCard extends StatelessWidget {
   final VoidCallback? onLike;
   final bool isLiked;
   final int? likeCountOverride;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1182,7 +1211,7 @@ class _UpdateCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _PostHeader(author: data.author, onTap: onAuthorTap),
+          _PostHeader(author: data.author, onTap: onAuthorTap, onDelete: onDelete),
           const SizedBox(height: 12),
           if (data.title.isNotEmpty) ...[
             Text(
@@ -1257,7 +1286,7 @@ class _UpdateCard extends StatelessWidget {
 
 class _HighlightCard extends StatelessWidget {
   const _HighlightCard(
-      {required this.data, this.onAuthorTap, this.onTap, this.onComment, this.onLike, this.isLiked = false, this.likeCountOverride});
+      {required this.data, this.onAuthorTap, this.onTap, this.onComment, this.onLike, this.isLiked = false, this.likeCountOverride, this.onDelete});
 
   final FeedCardData data;
   final VoidCallback? onAuthorTap;
@@ -1266,6 +1295,7 @@ class _HighlightCard extends StatelessWidget {
   final VoidCallback? onLike;
   final bool isLiked;
   final int? likeCountOverride;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1280,7 +1310,7 @@ class _HighlightCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _PostHeader(author: data.author, onTap: onAuthorTap),
+          _PostHeader(author: data.author, onTap: onAuthorTap, onDelete: onDelete),
           const SizedBox(height: 12),
           Text(
             data.title,
@@ -1358,6 +1388,7 @@ class _MissionCard extends StatelessWidget {
     this.onLike,
     this.isLiked = false,
     this.likeCountOverride,
+    this.onDelete,
   });
 
   final FeedCardData data;
@@ -1366,6 +1397,7 @@ class _MissionCard extends StatelessWidget {
   final VoidCallback? onLike;
   final bool isLiked;
   final int? likeCountOverride;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1378,7 +1410,7 @@ class _MissionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _PostHeader(author: data.author, onTap: onAuthorTap),
+            _PostHeader(author: data.author, onTap: onAuthorTap, onDelete: onDelete),
           const SizedBox(height: 10),
           Text(
             data.title,
@@ -1485,6 +1517,7 @@ class _InvestorCard extends StatefulWidget {
     this.onLike,
     this.isLiked = false,
     this.likeCountOverride,
+    this.onDelete,
   });
 
   final FeedCardData data;
@@ -1498,6 +1531,7 @@ class _InvestorCard extends StatefulWidget {
   final VoidCallback? onLike;
   final bool isLiked;
   final int? likeCountOverride;
+  final VoidCallback? onDelete;
 
   @override
   State<_InvestorCard> createState() => _InvestorCardState();
@@ -1575,7 +1609,10 @@ class _InvestorCardState extends State<_InvestorCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _PostHeader(author: data.author, onTap: widget.onAuthorTap),
+          _PostHeader(
+              author: data.author,
+              onTap: widget.onAuthorTap,
+              onDelete: widget.onDelete),
           const SizedBox(height: 10),
           Text(
             data.title,
@@ -1744,10 +1781,11 @@ class AvatarNameRow extends StatelessWidget {
 }
 
 class _PostHeader extends StatelessWidget {
-  const _PostHeader({required this.author, this.onTap});
+  const _PostHeader({required this.author, this.onTap, this.onDelete});
 
   final FeedAuthor author;
   final VoidCallback? onTap;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1802,10 +1840,14 @@ class _PostHeader extends StatelessWidget {
           icon: const Icon(Icons.more_horiz),
           tooltip: 'More',
           onPressed: () {
+            final rootContext = context;
             showModalBottomSheet(
               context: context,
               showDragHandle: true,
               builder: (context) {
+                final isAuthor = author.id != null &&
+                    author.id!.isNotEmpty &&
+                    author.id == Supabase.instance.client.auth.currentUser?.id;
                 return SafeArea(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -1830,6 +1872,41 @@ class _PostHeader extends StatelessWidget {
                           );
                         },
                       ),
+                      if (isAuthor && onDelete != null)
+                        ListTile(
+                          leading: const Icon(Icons.delete_outline),
+                          title: const Text('Delete post'),
+                          textColor: Theme.of(context).colorScheme.error,
+                          iconColor: Theme.of(context).colorScheme.error,
+                          onTap: () async {
+                            Navigator.pop(context);
+                            final confirmed = await showDialog<bool>(
+                                  context: rootContext,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Delete post?'),
+                                    content: const Text(
+                                        'This will remove your post permanently.'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, true),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor:
+                                              Theme.of(context).colorScheme.error,
+                                        ),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ],
+                                  ),
+                                ) ??
+                                false;
+                            if (!confirmed) return;
+                            onDelete?.call();
+                          },
+                        ),
                     ],
                   ),
                 );
