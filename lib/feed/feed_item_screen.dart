@@ -194,6 +194,25 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
       await _service.addComment(feedItemId: widget.id, body: text);
       _commentCtrl.clear();
       await _loadComments();
+      if (mounted && _data != null) {
+        setState(() {
+          _data = FeedCardData(
+            id: _data!.id,
+            type: _data!.type,
+            author: _data!.author,
+            title: _data!.title,
+            subtitle: _data!.subtitle,
+            ask: _data!.ask,
+            metrics: _data!.metrics,
+            tags: _data!.tags,
+            reward: _data!.reward,
+            featured: _data!.featured,
+            commentCount: _data!.commentCount + 1,
+            likeCount: _likeOverride ?? _data!.likeCount,
+            repostCount: _data!.repostCount,
+          );
+        });
+      }
     } catch (_) {
       if (mounted) {
         showErrorSnackBar(context, 'Could not post comment.');
@@ -233,6 +252,25 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
     try {
       await _service.deleteComment(comment.id);
       await _loadComments();
+      if (mounted && _data != null && _data!.commentCount > 0) {
+        setState(() {
+          _data = FeedCardData(
+            id: _data!.id,
+            type: _data!.type,
+            author: _data!.author,
+            title: _data!.title,
+            subtitle: _data!.subtitle,
+            ask: _data!.ask,
+            metrics: _data!.metrics,
+            tags: _data!.tags,
+            reward: _data!.reward,
+            featured: _data!.featured,
+            commentCount: _data!.commentCount - 1,
+            likeCount: _likeOverride ?? _data!.likeCount,
+            repostCount: _data!.repostCount,
+          );
+        });
+      }
       if (mounted) {
         showSuccessSnackBar(context, 'Comment deleted');
       }
@@ -252,116 +290,144 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Feed item'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _fetch,
-            tooltip: 'Refresh',
-          ),
-          IconButton(
-            icon: const Icon(Icons.mail_outline),
-            tooltip: 'Intros',
+    final popResult = _data == null
+        ? null
+        : {
+            'id': _data!.id,
+            'commentCount': _data!.commentCount,
+            'likeCount': _likeOverride ?? _data!.likeCount,
+            'isLiked': _isLiked,
+          };
+
+    return WillPopScope(
+      onWillPop: () async {
+        if (popResult != null) {
+          Navigator.pop(context, popResult);
+          return false;
+        }
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
             onPressed: () {
-              Navigator.pushNamed(context, '/intros',
-                  arguments: {'initialTab': 1});
+              if (popResult != null) {
+                Navigator.pop(context, popResult);
+              } else {
+                Navigator.pop(context);
+              }
             },
           ),
-          PopupMenuButton<String>(
-            tooltip: 'Copy link',
-            onSelected: (choice) {
-              _copyLink(choice == 'web');
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'app',
-                child: Text('Copy app link'),
-              ),
-              const PopupMenuItem(
-                value: 'web',
-                child: Text('Copy web link'),
-              ),
-            ],
-            icon: const Icon(Icons.link),
-          ),
-        ],
-      ),
-      body: LoadingOverlay(
-        isLoading: _loading && _data == null,
-        message: 'Loading...',
-        child: _error != null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline, size: 48),
-                      const SizedBox(height: 12),
-                      Text(
-                        _error!,
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyLarge,
-                      ),
-                      const SizedBox(height: 12),
-                      OutlinedButton(
-                        onPressed: _fetch,
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
+          title: const Text('Feed item'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loading ? null : _fetch,
+              tooltip: 'Refresh',
+            ),
+            IconButton(
+              icon: const Icon(Icons.mail_outline),
+              tooltip: 'Intros',
+              onPressed: () {
+                Navigator.pushNamed(context, '/intros',
+                    arguments: {'initialTab': 1});
+              },
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Copy link',
+              onSelected: (choice) {
+                _copyLink(choice == 'web');
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'app',
+                  child: Text('Copy app link'),
                 ),
-              )
-            : _data == null
-                ? const SizedBox.shrink()
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                      child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                const PopupMenuItem(
+                  value: 'web',
+                  child: Text('Copy web link'),
+                ),
+              ],
+              icon: const Icon(Icons.link),
+            ),
+          ],
+        ),
+        body: LoadingOverlay(
+          isLoading: _loading && _data == null,
+          message: 'Loading...',
+          child: _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        FeedCard(
-                          data: _data!,
-                          introPending:
-                              _introStatus == ContactRequestStatus.pending,
-                          introStatus: _introStatus,
-                          onAuthorTap: _openProfileSheet,
-                          onLike: _handleLike,
-                          isLiked: _isLiked,
-                          likeCountOverride: _likeOverride,
-                          onComment: () {
-                            _commentFocusNode.requestFocus();
-                          },
-                          // Comment count badge stays in sync with data snapshot
+                        const Icon(Icons.error_outline, size: 48),
+                        const SizedBox(height: 12),
+                        Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyLarge,
                         ),
-                        const SizedBox(height: 16),
-                        _Actions(
-                          data: _data!,
-                          introSent: _introSent,
-                          sendingIntro: _sendingIntro,
-                          onRequestIntro: _handleRequestIntro,
-                          onOpenProfile: _openProfileSheet,
-                          onCopyLink: _copyLink,
-                          copiedLink: _copiedLink,
-                          introStatus: _introStatus,
-                        ),
-                        const SizedBox(height: 16),
-                        _CommentsSection(
-                          comments: _comments,
-                          loading: _commentsLoading,
-                          error: _commentsError,
-                          onRetry: _loadComments,
-                          onSubmit: _postComment,
-                          controller: _commentCtrl,
-                          focusNode: _commentFocusNode,
-                          posting: _postingComment,
-                          deleting: _deletingComment,
-                          onDelete: _deleteComment,
+                        const SizedBox(height: 12),
+                        OutlinedButton(
+                          onPressed: _fetch,
+                          child: const Text('Retry'),
                         ),
                       ],
                     ),
                   ),
+                )
+              : _data == null
+                  ? const SizedBox.shrink()
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                        child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          FeedCard(
+                            data: _data!,
+                            introPending:
+                                _introStatus == ContactRequestStatus.pending,
+                            introStatus: _introStatus,
+                            onAuthorTap: _openProfileSheet,
+                            onLike: _handleLike,
+                            isLiked: _isLiked,
+                            likeCountOverride: _likeOverride,
+                            onComment: () {
+                              _commentFocusNode.requestFocus();
+                            },
+                            // Comment count badge stays in sync with data snapshot
+                          ),
+                          const SizedBox(height: 16),
+                          _Actions(
+                            data: _data!,
+                            introSent: _introSent,
+                            sendingIntro: _sendingIntro,
+                            onRequestIntro: _handleRequestIntro,
+                            onOpenProfile: _openProfileSheet,
+                            onCopyLink: _copyLink,
+                            copiedLink: _copiedLink,
+                            introStatus: _introStatus,
+                          ),
+                          const SizedBox(height: 16),
+                          _CommentsSection(
+                            comments: _comments,
+                            loading: _commentsLoading,
+                            error: _commentsError,
+                            onRetry: _loadComments,
+                            onSubmit: _postComment,
+                            controller: _commentCtrl,
+                            focusNode: _commentFocusNode,
+                            posting: _postingComment,
+                            deleting: _deletingComment,
+                            onDelete: _deleteComment,
+                          ),
+                        ],
+                      ),
+                    ),
+        ),
       ),
     );
   }

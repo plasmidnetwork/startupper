@@ -17,7 +17,8 @@ class SupabaseService {
     }
     final res = await _client
         .from('profiles')
-        .select('id, email, full_name, headline, location, role')
+        .select(
+            'id, email, full_name, headline, location, role, available_for_freelancing, avatar_url')
         .eq('id', user.id)
         .maybeSingle();
     _profileCache = res;

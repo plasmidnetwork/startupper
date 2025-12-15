@@ -464,8 +464,9 @@ class _FeedScreenState extends State<FeedScreen> {
     }
   }
 
-  void _openFeedDetail(FeedCardData data, {bool focusComments = false}) {
-    Navigator.pushNamed(
+  Future<void> _openFeedDetail(FeedCardData data,
+      {bool focusComments = false}) async {
+    final result = await Navigator.pushNamed(
       context,
       '/feed/item',
       arguments: {
@@ -481,6 +482,42 @@ class _FeedScreenState extends State<FeedScreen> {
         'likeCountOverride': _likeOverrides[data.id],
       },
     );
+
+    if (result is Map && result['id'] == data.id) {
+      setState(() {
+        final index = _items.indexWhere((it) => it.id == data.id);
+        if (index != -1) {
+          _items[index] = FeedCardData(
+            id: _items[index].id,
+            type: _items[index].type,
+            author: _items[index].author,
+            title: _items[index].title,
+            subtitle: _items[index].subtitle,
+            ask: _items[index].ask,
+            metrics: _items[index].metrics,
+            tags: _items[index].tags,
+            reward: _items[index].reward,
+            featured: _items[index].featured,
+            commentCount:
+                result['commentCount'] is int ? result['commentCount'] : _items[index].commentCount,
+            likeCount: result['likeCount'] is int
+                ? result['likeCount']
+                : _items[index].likeCount,
+            repostCount: _items[index].repostCount,
+          );
+          if (result['isLiked'] is bool) {
+            if (result['isLiked'] == true) {
+              _likedIds.add(data.id);
+            } else {
+              _likedIds.remove(data.id);
+            }
+          }
+          if (result['likeCount'] is int) {
+            _likeOverrides[data.id] = result['likeCount'];
+          }
+        }
+      });
+    }
   }
 
   void _openIntros({int initialTab = 0}) {

@@ -243,7 +243,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: const Text('Profile'),
         actions: [
           if (_profile != null)
-            TextButton(
+            IconButton(
+              tooltip: _editing ? 'Cancel edit' : 'Edit profile',
+              icon: Icon(_editing ? Icons.close : Icons.edit_outlined),
               onPressed: _saving
                   ? null
                   : () {
@@ -252,12 +254,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _hydrateForm(_profile);
                       });
                     },
-              child: Text(
-                _editing ? 'Cancel' : 'Edit',
-                style: TextStyle(
-                  color: theme.colorScheme.onPrimary,
-                ),
-              ),
             ),
         ],
       ),
@@ -291,17 +287,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ],
                 )
-              : ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    _ProfileHeader(
-                      profile: _profile,
-                      loading: _saving,
-                      onChangeAvatar: _openAvatarPicker,
-                    ),
-                    const SizedBox(height: 24),
-                    _editing
-                        ? _ProfileEditForm(
+                : ListView(
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      _ProfileHeader(
+                        profile: _profile,
+                        loading: _saving,
+                        onChangeAvatar: _openAvatarPicker,
+                      ),
+                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
+                      _editing
+                          ? _ProfileEditForm(
                             formKey: _formKey,
                             nameCtrl: _nameCtrl,
                             headlineCtrl: _headlineCtrl,
@@ -439,12 +436,24 @@ class _ProfileHeader extends StatelessWidget {
                   avatarUrl == null ? const Icon(Icons.person, size: 32) : null,
             ),
             Positioned(
-              bottom: -4,
-              right: -4,
-              child: IconButton(
-                icon: const Icon(Icons.edit, size: 18),
-                onPressed: loading ? null : onChangeAvatar,
-                tooltip: 'Change avatar',
+              bottom: 0,
+              right: 0,
+              child: Material(
+                shape: const CircleBorder(),
+                color: Theme.of(context).colorScheme.surface,
+                elevation: 2,
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: loading ? null : onChangeAvatar,
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Icon(
+                      Icons.edit,
+                      size: 16,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
