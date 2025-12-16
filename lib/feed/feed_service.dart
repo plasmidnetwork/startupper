@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_models.dart';
 import 'contact_request_models.dart';
 import 'comment_models.dart';
+import 'intro_chat_models.dart';
 
 class FeedService {
   final SupabaseClient _client = Supabase.instance.client;
@@ -141,6 +142,40 @@ class FeedService {
         .toList();
   }
 
+  Stream<List<IntroMessage>> streamIntroMessages(String introId) {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('User not signed in');
+    }
+    return _client
+        .from('intro_messages')
+        .stream(primaryKey: ['id'])
+        .eq('intro_id', introId)
+        .order('created_at')
+        .map((rows) => rows
+            .whereType<Map<String, dynamic>>()
+            .map((row) => _mapIntroMessage(row, userId))
+            .whereType<IntroMessage>()
+            .toList());
+  }
+
+  Future<void> sendIntroMessage({
+    required String introId,
+    required String body,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) throw StateError('User not signed in');
+    final trimmed = body.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('Message cannot be empty');
+    }
+    await _client.from('intro_messages').insert({
+      'intro_id': introId,
+      'sender_id': userId,
+      'body': trimmed,
+    });
+  }
+
   Future<void> addComment({
     required String feedItemId,
     required String body,
@@ -238,6 +273,23 @@ class FeedService {
         avatarUrl: userJson['avatar_url']?.toString(),
       ),
       isMine: authorId == currentUserId,
+    );
+  }
+
+  IntroMessage? _mapIntroMessage(
+      Map<String, dynamic> row, String currentUserId) {
+    final createdAtStr = row['created_at']?.toString();
+    final createdAt = DateTime.tryParse(createdAtStr ?? '') ?? DateTime.now();
+    final senderId = row['sender_id']?.toString() ?? '';
+    return IntroMessage(
+      id: row['id']?.toString() ?? '',
+      introId: row['intro_id']?.toString() ?? '',
+      senderId: senderId,
+      senderName: senderId == currentUserId ? 'You' : 'Contact',
+      senderAvatar: null,
+      body: row['body']?.toString() ?? '',
+      createdAt: createdAt,
+      isMine: senderId == currentUserId,
     );
   }
 

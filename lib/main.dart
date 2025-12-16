@@ -16,6 +16,7 @@ import 'feed/contact_requests_screen.dart';
 import 'feed/feed_item_screen.dart';
 import 'feed/feed_models.dart';
 import 'feed/contact_request_models.dart';
+import 'feed/intro_chat_screen.dart';
 import 'startups/startup_discovery_screen.dart';
 
 Future<void> main() async {
@@ -174,6 +175,22 @@ class _StartupperAppState extends State<StartupperApp> {
             initialTab = args['initialTab'] as int;
           }
           return ContactRequestsScreen(initialTab: initialTab);
+        },
+        '/intros/chat': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is! Map) {
+            return const Scaffold(
+              body: Center(child: Text('Missing intro chat args')),
+            );
+          }
+          final introId = args['introId']?.toString();
+          final other = args['other'];
+          if (introId == null || other is! ContactRequestParty) {
+            return const Scaffold(
+              body: Center(child: Text('Missing intro chat args')),
+            );
+          }
+          return IntroChatScreen(introId: introId, other: other);
         },
         '/feed/item': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;

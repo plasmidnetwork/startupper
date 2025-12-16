@@ -328,7 +328,7 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
             ),
             IconButton(
               icon: const Icon(Icons.mail_outline),
-              tooltip: 'Intros',
+              tooltip: 'Connections',
               onPressed: () {
                 Navigator.pushNamed(context, '/intros',
                     arguments: {'initialTab': 1});
@@ -436,7 +436,7 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
     if (_sendingIntro || _introSent) return;
     final authorId = _data?.author.id;
     if (authorId == null || authorId.isEmpty) {
-      showErrorSnackBar(context, 'Missing member profile for intro.');
+      showErrorSnackBar(context, 'Missing member profile for connection.');
       return;
     }
     setState(() => _sendingIntro = true);
@@ -449,10 +449,10 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
       setState(() {
         _introSent = true;
       });
-      showSuccessSnackBar(context, 'Intro request sent');
+      showSuccessSnackBar(context, 'Connection request sent');
     } catch (_) {
       if (!mounted) return;
-      showErrorSnackBar(context, 'Could not send intro right now.');
+      showErrorSnackBar(context, 'Could not send connection right now.');
     } finally {
       if (mounted) {
         setState(() => _sendingIntro = false);
@@ -602,7 +602,7 @@ class _Actions extends StatelessWidget {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Request intro'),
+                : const Text('Connect'),
           ),
         ],
       ],
@@ -794,12 +794,12 @@ class _CommentsSection extends StatelessWidget {
 String _chipLabel(ContactRequestStatus? status) {
   switch (status) {
     case ContactRequestStatus.accepted:
-      return 'Intro accepted';
+      return 'Connected';
     case ContactRequestStatus.declined:
-      return 'Intro declined';
+      return 'Declined';
     case ContactRequestStatus.pending:
     case null:
-      return 'Intro sent';
+      return 'Request sent';
   }
 }
 

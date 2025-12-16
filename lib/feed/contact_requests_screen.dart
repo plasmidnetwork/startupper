@@ -207,7 +207,7 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
   Widget build(BuildContext context) {
     if (_userId == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Intros')),
+        appBar: AppBar(title: const Text('Connections')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -232,7 +232,7 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
       initialIndex: widget.initialTab.clamp(0, 1),
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Intros'),
+          title: const Text('Connections'),
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Incoming'),
@@ -268,6 +268,7 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
               },
               onEditNotes: _editNotes,
               updatingNotes: _updatingNotes,
+              onMessage: _openChat,
             ),
             _RequestList(
               requests: _outgoing,
@@ -293,6 +294,7 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
               },
               onEditNotes: _editNotes,
               updatingNotes: _updatingNotes,
+              onMessage: _openChat,
             ),
           ],
         ),
@@ -306,6 +308,18 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
       context,
       '/feed/item',
       arguments: {'id': feedItemId, 'data': initial},
+    );
+  }
+
+  Future<void> _openChat(ContactRequest request, ContactRequestParty other) async {
+    if (!mounted) return;
+    Navigator.pushNamed(
+      context,
+      '/intros/chat',
+      arguments: {
+        'introId': request.id,
+        'other': other,
+      },
     );
   }
 
@@ -329,7 +343,7 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
               final msg = await showDialog<String?>(
                 context: context,
                 builder: (context) => AlertDialog(
-                  title: Text('Request intro to ${party.name}'),
+                  title: Text('Connect with ${party.name}'),
                   content: TextField(
                     controller: controller,
                     maxLines: 3,
@@ -364,10 +378,11 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
                   _introDisabled.add(party.id);
                 });
                 Navigator.pop(context);
-                showSuccessSnackBar(context, 'Intro request sent');
+                showSuccessSnackBar(context, 'Connection request sent');
               } catch (_) {
                 if (mounted) {
-                  showErrorSnackBar(context, 'Could not send intro right now.');
+                  showErrorSnackBar(
+                      context, 'Could not send connection right now.');
                 }
               } finally {
                 setSheetState(() => requesting = false);
@@ -477,15 +492,16 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
                                 (party.id.isEmpty || disabled || requesting)
                                     ? null
                                     : sendIntro,
-                            child: requesting
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2),
-                                  )
-                                : Text(
-                                    disabled ? 'Intro sent' : 'Request intro'),
+                          child: requesting
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
+                                )
+                              : Text(disabled
+                                  ? 'Request sent'
+                                  : 'Connect'),
                           ),
                         ),
                       ),
@@ -526,6 +542,7 @@ class _RequestList extends StatelessWidget {
     this.onDecline,
     required this.onEditNotes,
     required this.updatingNotes,
+    required this.onMessage,
   });
 
   final List<ContactRequest> requests;
@@ -544,6 +561,7 @@ class _RequestList extends StatelessWidget {
   final void Function(ContactRequest)? onDecline;
   final void Function(ContactRequest) onEditNotes;
   final Map<String, bool> updatingNotes;
+  final void Function(ContactRequest, ContactRequestParty) onMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -628,6 +646,7 @@ class _RequestList extends StatelessWidget {
             },
             onEditNotes: () => onEditNotes(req),
             editingNotes: isUpdatingNotes,
+            onMessage: () => onMessage(req, other),
           );
         },
       ),
@@ -648,6 +667,7 @@ class _RequestCard extends StatelessWidget {
     this.onAuthorTap,
     this.onEditNotes,
     this.editingNotes = false,
+    this.onMessage,
   });
 
   final ContactRequest request;
@@ -661,6 +681,7 @@ class _RequestCard extends StatelessWidget {
   final VoidCallback? onAuthorTap;
   final VoidCallback? onEditNotes;
   final bool editingNotes;
+  final VoidCallback? onMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -833,6 +854,23 @@ class _RequestCard extends StatelessWidget {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Text('Accept'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (!canAct &&
+                request.status == ContactRequestStatus.accepted &&
+                onMessage != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: onMessage,
+                      icon:
+                          const Icon(Icons.chat_bubble_outline, size: 18),
+                      label: const Text('Message'),
                     ),
                   ),
                 ],

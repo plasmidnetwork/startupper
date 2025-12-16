@@ -154,10 +154,11 @@ class _FeedScreenState extends State<FeedScreen> {
                   if (author.id != null) _pendingIntroTargets.add(author.id!);
                 });
                 Navigator.pop(context);
-                showSuccessSnackBar(context, 'Intro request sent');
+                showSuccessSnackBar(context, 'Connection request sent');
               } catch (_) {
                 if (mounted) {
-                  showErrorSnackBar(context, 'Could not send intro right now.');
+                  showErrorSnackBar(
+                      context, 'Could not send connection right now.');
                 }
               } finally {
                 setSheetState(() {
@@ -272,7 +273,7 @@ class _FeedScreenState extends State<FeedScreen> {
                       Expanded(
                         child: Tooltip(
                           message: isIntroDisabled
-                              ? 'You already sent an intro to this member'
+                              ? 'You already sent a connection to this member'
                               : '',
                           child: ElevatedButton(
                             onPressed: (author.id == null ||
@@ -290,8 +291,8 @@ class _FeedScreenState extends State<FeedScreen> {
                                     ),
                                   )
                                 : Text(isIntroDisabled
-                                    ? 'Intro sent'
-                                    : 'Request intro'),
+                                    ? 'Request sent'
+                                    : 'Connect'),
                           ),
                         ),
                       ),
@@ -701,7 +702,7 @@ class _FeedScreenState extends State<FeedScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.mail_outline),
-            tooltip: 'Intros',
+            tooltip: 'Connections',
             onPressed: () {
               _openIntros(initialTab: 0);
             },
@@ -1515,7 +1516,7 @@ class _InvestorCardState extends State<_InvestorCard> {
     if (_requesting || _introSent) return;
     final authorId = widget.data.author.id;
     if (authorId == null || authorId.isEmpty) {
-      showErrorSnackBar(context, 'Missing member profile for intro.');
+      showErrorSnackBar(context, 'Missing member profile for connection.');
       return;
     }
     final message = await showDialog<String?>(
@@ -1534,10 +1535,10 @@ class _InvestorCardState extends State<_InvestorCard> {
       if (!mounted) return;
       setState(() => _introSent = true);
       widget.onIntroSent?.call();
-      showSuccessSnackBar(context, 'Intro request sent');
+      showSuccessSnackBar(context, 'Connection request sent');
     } catch (_) {
       if (!mounted) return;
-      showErrorSnackBar(context, 'Could not send intro right now.');
+      showErrorSnackBar(context, 'Could not send connection right now.');
     } finally {
       if (mounted) {
         setState(() => _requesting = false);
@@ -1626,7 +1627,7 @@ class _InvestorCardState extends State<_InvestorCard> {
                             width: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Request intro'),
+                        : const Text('Connect'),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -2912,7 +2913,7 @@ class _IntroDialogState extends State<_IntroDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: const Text('Request intro'),
+      title: const Text('Connect'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
