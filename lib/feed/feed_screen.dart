@@ -1712,8 +1712,8 @@ class AvatarNameRow extends StatelessWidget {
               ),
               Text(
                 [
+                  if (author.role.isNotEmpty) author.role,
                   if (author.location.isNotEmpty) author.location,
-                  if (author.affiliation.isNotEmpty) author.affiliation,
                   if (author.timeAgo.isNotEmpty) author.timeAgo,
                 ].join(' · '),
                 style: theme.textTheme.bodySmall
@@ -1746,8 +1746,8 @@ class _PostHeader extends StatelessWidget {
     final accent = _roleAccent(author.role, theme);
     final initial = author.name.isNotEmpty ? author.name[0].toUpperCase() : '?';
     final subtitle = [
+      if (author.role.isNotEmpty) author.role,
       if (author.location.isNotEmpty) author.location,
-      if (author.affiliation.isNotEmpty) author.affiliation,
       if (author.timeAgo.isNotEmpty) author.timeAgo,
     ].join(' · ');
 
@@ -2536,6 +2536,8 @@ class _ComposeDialogState extends State<_ComposeDialog> {
                       maxLines: null,
                       minLines: 6,
                       maxLength: _maxContentLength,
+                      // Work around iOS context menu crash by disabling the system menu for now
+                      contextMenuBuilder: (context, state) => const SizedBox.shrink(),
                       style: theme.textTheme.bodyLarge?.copyWith(
                         fontSize: 16,
                         height: 1.5,

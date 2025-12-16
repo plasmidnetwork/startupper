@@ -509,7 +509,11 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         Text(
-                          '${author.role}${author.affiliation.isNotEmpty ? ' · ${author.affiliation}' : ''}',
+                          [
+                            if (author.role.isNotEmpty) author.role,
+                            if (author.location.isNotEmpty) author.location,
+                            if (author.timeAgo.isNotEmpty) author.timeAgo,
+                          ].join(' · '),
                           style: theme.textTheme.bodySmall,
                         ),
                       ],

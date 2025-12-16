@@ -657,6 +657,7 @@ class _ProfileEditForm extends StatelessWidget {
               labelText: 'Full name',
               border: OutlineInputBorder(),
             ),
+            contextMenuBuilder: (context, state) => const SizedBox.shrink(),
             validator: (v) {
               if (v == null || v.trim().isEmpty) {
                 return 'Name is required';
@@ -671,6 +672,7 @@ class _ProfileEditForm extends StatelessWidget {
               labelText: 'Headline',
               border: OutlineInputBorder(),
             ),
+            contextMenuBuilder: (context, state) => const SizedBox.shrink(),
             validator: (v) {
               if (v == null || v.trim().isEmpty) {
                 return 'Headline is required';
@@ -685,6 +687,7 @@ class _ProfileEditForm extends StatelessWidget {
               labelText: 'Location',
               border: OutlineInputBorder(),
             ),
+            contextMenuBuilder: (context, state) => const SizedBox.shrink(),
             validator: (v) {
               if (v == null || v.trim().isEmpty) {
                 return 'Location is required';
@@ -729,6 +732,7 @@ class _ProfileEditForm extends StatelessWidget {
               labelText: 'Startup name',
               border: OutlineInputBorder(),
             ),
+            contextMenuBuilder: (context, state) => const SizedBox.shrink(),
             validator: (v) {
               if (v == null || v.trim().isEmpty) {
                 return 'Startup name is required';
@@ -743,6 +747,7 @@ class _ProfileEditForm extends StatelessWidget {
               labelText: 'Pitch',
               border: OutlineInputBorder(),
             ),
+            contextMenuBuilder: (context, state) => const SizedBox.shrink(),
             maxLines: 2,
             validator: (v) {
               if (v == null || v.trim().isEmpty) {
@@ -758,6 +763,7 @@ class _ProfileEditForm extends StatelessWidget {
               labelText: 'Stage',
               border: OutlineInputBorder(),
             ),
+            contextMenuBuilder: (context, state) => const SizedBox.shrink(),
           ),
           const SizedBox(height: 8),
           TextFormField(
@@ -766,6 +772,7 @@ class _ProfileEditForm extends StatelessWidget {
               labelText: 'Looking for (comma separated)',
               border: OutlineInputBorder(),
             ),
+            contextMenuBuilder: (context, state) => const SizedBox.shrink(),
           ),
         ],
       );
@@ -813,6 +820,7 @@ class _ProfileEditForm extends StatelessWidget {
               labelText: 'Stages (comma separated)',
               border: OutlineInputBorder(),
             ),
+            contextMenuBuilder: (context, state) => const SizedBox.shrink(),
           ),
         ],
       );
@@ -832,6 +840,7 @@ class _ProfileEditForm extends StatelessWidget {
               labelText: 'Main role',
               border: OutlineInputBorder(),
             ),
+            contextMenuBuilder: (context, state) => const SizedBox.shrink(),
             validator: (v) {
               if (v == null || v.trim().isEmpty) {
                 return 'Main role is required';
@@ -846,6 +855,7 @@ class _ProfileEditForm extends StatelessWidget {
               labelText: 'Experience level',
               border: OutlineInputBorder(),
             ),
+            contextMenuBuilder: (context, state) => const SizedBox.shrink(),
             validator: (v) {
               if (v == null || v.trim().isEmpty) {
                 return 'Experience level is required';
@@ -860,6 +870,7 @@ class _ProfileEditForm extends StatelessWidget {
               labelText: 'Interests (comma separated)',
               border: OutlineInputBorder(),
             ),
+            contextMenuBuilder: (context, state) => const SizedBox.shrink(),
           ),
         ],
       );
