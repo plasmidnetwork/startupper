@@ -525,6 +525,7 @@ class _FeedScreenState extends State<FeedScreen> {
             tags: _items[index].tags,
             reward: _items[index].reward,
             featured: _items[index].featured,
+            media: _items[index].media,
             commentCount: result['commentCount'] is int
                 ? result['commentCount']
                 : _items[index].commentCount,
@@ -1157,6 +1158,7 @@ class _UpdateCard extends StatelessWidget {
           ],
           Text(
             data.subtitle,
+            softWrap: true,
             style:
                 theme.textTheme.bodyMedium?.copyWith(height: 1.4, fontSize: 15),
           ),
@@ -2280,7 +2282,7 @@ class _ComposeDialogState extends State<_ComposeDialog> {
   bool _posting = false;
   bool _showMoreOptions = false;
   final List<_LocalAttachment> _attachments = [];
-  static const int _maxContentLength = 3000;
+  static const int _maxContentLength = 500;
   static const int _maxTags = 6;
   static const int _maxAttachments = 4;
 
@@ -2416,30 +2418,12 @@ class _ComposeDialogState extends State<_ComposeDialog> {
       return;
     }
 
-    // Extract title from first line, rest goes to subtitle
-    final lines = content.split('\n');
-    final firstLine = lines.first.trim();
-    final hasMultipleLines = lines.length > 1;
-
-    String title;
-    String subtitle;
-
-    if (hasMultipleLines) {
-      title = firstLine.length <= 80
-          ? firstLine
-          : '${firstLine.substring(0, 77)}...';
-      subtitle = lines.skip(1).join('\n').trim();
-    } else {
-      title = firstLine.length <= 80 ? firstLine : '${firstLine.substring(0, 77)}...';
-      subtitle = '';
-    }
-
     try {
       final uploadedMedia = await _uploadAttachments();
       final payload = _ComposePayload(
         type: FeedCardType.update,
-        title: title,
-        subtitle: subtitle.isNotEmpty ? subtitle : title,
+        title: '',
+        subtitle: content,
         ask: _askCtrl.text.trim().isEmpty ? null : _askCtrl.text.trim(),
         tags: tags,
         metrics: const [],
@@ -2726,11 +2710,15 @@ class _ComposeDialogState extends State<_ComposeDialog> {
                   ),
 
                   IconButton(
-                    onPressed: _pickVideo,
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Video upload coming soon')),
+                      );
+                    },
                     icon: const Icon(Icons.videocam_outlined),
-                    tooltip: 'Add video',
+                    tooltip: 'Video upload coming soon',
                     style: IconButton.styleFrom(
-                      foregroundColor: theme.colorScheme.onSurfaceVariant,
+                      foregroundColor: theme.colorScheme.onSurfaceVariant.withOpacity(0.4),
                     ),
                   ),
 
@@ -2833,40 +2821,71 @@ class _MediaGallery extends StatelessWidget {
           .map(
             (m) => ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Container(
-                width: 110,
-                height: 110,
-                color: theme.colorScheme.surfaceVariant,
-                child: m.type == 'video'
-                    ? Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Container(
-                            color: theme.colorScheme.surfaceVariant,
-                          ),
-                          Center(
-                            child: Icon(
-                              Icons.play_circle_fill,
-                              size: 36,
-                              color: theme.colorScheme.primary,
+              child: GestureDetector(
+                onTap: () => _openMediaViewer(context, m),
+                child: Container(
+                  width: 110,
+                  height: 110,
+                  color: theme.colorScheme.surfaceVariant,
+                  child: m.type == 'video'
+                      ? Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Container(
+                              color: theme.colorScheme.surfaceVariant,
                             ),
+                            Center(
+                              child: Icon(
+                                Icons.play_circle_fill,
+                                size: 36,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Image.network(
+                          m.url,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Center(
+                            child: Icon(Icons.broken_image,
+                                color: theme.colorScheme.outline),
                           ),
-                        ],
-                      )
-                    : Image.network(
-                        m.url,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Center(
-                          child: Icon(Icons.broken_image,
-                              color: theme.colorScheme.outline),
                         ),
-                      ),
+                ),
               ),
             ),
           )
           .toList(),
     );
   }
+}
+
+void _openMediaViewer(BuildContext context, FeedMedia media) {
+  if (media.type == 'video') {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Video playback coming soon')),
+    );
+    return;
+  }
+  showDialog(
+    context: context,
+    builder: (context) => Dialog(
+      insetPadding: const EdgeInsets.all(12),
+      backgroundColor: Colors.black,
+      child: GestureDetector(
+        onTap: () => Navigator.pop(context),
+        child: InteractiveViewer(
+          child: Image.network(
+            media.url,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Center(
+              child: Icon(Icons.broken_image, color: Colors.white70),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _IntroDialog extends StatefulWidget {
