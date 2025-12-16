@@ -2342,7 +2342,8 @@ class _ComposeDialogState extends State<_ComposeDialog> {
       tags: tags,
       metrics: const [],
       featured: false,
-      userRoleTag: widget.userRole,
+      // Removed auto-tagging of user role (e.g., #Investor, #Founder)
+      userRoleTag: null,
     );
 
     await widget.onPost(payload);
@@ -2512,9 +2513,7 @@ class _ComposeDialogState extends State<_ComposeDialog> {
                         decoration: InputDecoration(
                           labelText: 'Tags',
                           hintText: 'AI, Fintech, Seed...',
-                          helperText: widget.userRole != null
-                              ? 'Your role "${widget.userRole}" will be auto-tagged'
-                              : 'Comma-separated',
+                          helperText: 'Comma-separated',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
