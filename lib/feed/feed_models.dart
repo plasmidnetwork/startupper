@@ -7,6 +7,7 @@ class FeedAuthor {
     required this.name,
     required this.role,
     required this.affiliation,
+    required this.location,
     required this.timeAgo,
     this.id,
     this.avatarUrl,
@@ -16,6 +17,7 @@ class FeedAuthor {
   final String name;
   final String role;
   final String affiliation;
+  final String location;
   final String timeAgo;
   final String? avatarUrl;
 }

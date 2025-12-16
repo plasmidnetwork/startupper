@@ -1007,12 +1007,15 @@ class _PreviewCard extends StatelessWidget {
       ...tags,
       if (userRole != null && userRole!.isNotEmpty) userRole!,
     }.toList();
-    return Card(
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1021,7 +1024,8 @@ class _PreviewCard extends StatelessWidget {
               children: [
                 Text(
                   'Preview',
-                  style: theme.textTheme.labelLarge,
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 Chip(
                   label: Text(type.name),
@@ -1029,11 +1033,11 @@ class _PreviewCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Text(
               title,
               style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
             Text(
@@ -1052,9 +1056,9 @@ class _PreviewCard extends StatelessWidget {
               ),
             ],
             if (previewTags.isNotEmpty) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               Wrap(
-                spacing: 6,
+                spacing: 8,
                 runSpacing: 6,
                 children: previewTags
                     .map((t) => Chip(
@@ -1065,7 +1069,7 @@ class _PreviewCard extends StatelessWidget {
               ),
             ],
             if (featured) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               Text(
                 'Featured',
                 style: theme.textTheme.labelMedium
@@ -1075,6 +1079,52 @@ class _PreviewCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _TypeSelector extends StatelessWidget {
+  const _TypeSelector({required this.value, required this.onChanged});
+
+  final FeedCardType value;
+  final ValueChanged<FeedCardType> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    const types = [FeedCardType.update]; // beta: only update posts
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Type', style: theme.textTheme.labelLarge),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: types
+              .map(
+                (t) => ChoiceChip(
+                  label: Text(t.name),
+                  selected: value == t,
+                  onSelected: (_) => onChanged(t),
+                  selectedColor: theme.colorScheme.primary.withValues(alpha: 0.12),
+                  labelStyle: theme.textTheme.labelLarge?.copyWith(
+                    color: value == t
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Only updates for beta. Other post types coming soon.',
+          style:
+              theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
+        ),
+      ],
     );
   }
 }
@@ -1762,7 +1812,11 @@ class AvatarNameRow extends StatelessWidget {
                     ?.copyWith(fontWeight: FontWeight.w600),
               ),
               Text(
-                '${author.role} · ${author.affiliation} · ${author.timeAgo}',
+                [
+                  if (author.location.isNotEmpty) author.location,
+                  if (author.affiliation.isNotEmpty) author.affiliation,
+                  if (author.timeAgo.isNotEmpty) author.timeAgo,
+                ].join(' · '),
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline),
               ),
@@ -1793,6 +1847,7 @@ class _PostHeader extends StatelessWidget {
     final accent = _roleAccent(author.role, theme);
     final initial = author.name.isNotEmpty ? author.name[0].toUpperCase() : '?';
     final subtitle = [
+      if (author.location.isNotEmpty) author.location,
       if (author.affiliation.isNotEmpty) author.affiliation,
       if (author.timeAgo.isNotEmpty) author.timeAgo,
     ].join(' · ');
@@ -2312,6 +2367,7 @@ class _ComposeDialog extends StatefulWidget {
 }
 
 class _ComposeDialogState extends State<_ComposeDialog> {
+  static const List<FeedCardType> _allowedTypes = [FeedCardType.update];
   final _formKey = GlobalKey<FormState>();
   FeedCardType _type = FeedCardType.update;
   final _titleCtrl = TextEditingController();
@@ -2452,23 +2508,13 @@ class _ComposeDialogState extends State<_ComposeDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              DropdownButtonFormField<FeedCardType>(
-                value: _type,
-                decoration: const InputDecoration(
-                  labelText: 'Type',
-                  border: OutlineInputBorder(),
+              if (_allowedTypes.length > 1) ...[
+                _TypeSelector(
+                  value: _type,
+                  onChanged: (val) => setState(() => _type = val),
                 ),
-                onChanged: (val) {
-                  if (val != null) setState(() => _type = val);
-                },
-                items: FeedCardType.values
-                    .map((t) => DropdownMenuItem(
-                          value: t,
-                          child: Text(t.name),
-                        ))
-                    .toList(),
-              ),
-              const SizedBox(height: 12),
+                const SizedBox(height: 16),
+              ],
               TextFormField(
                 controller: _titleCtrl,
                 decoration: const InputDecoration(
@@ -2527,14 +2573,17 @@ class _ComposeDialogState extends State<_ComposeDialog> {
                 maxLength: 120,
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _rewardCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Reward (optional)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
+              if (_type == FeedCardType.mission || _type == FeedCardType.highlight)
+                ...[
+                  TextFormField(
+                    controller: _rewardCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Reward (optional)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
               SwitchListTile(
                 value: _featured,
                 onChanged: (val) => setState(() => _featured = val),

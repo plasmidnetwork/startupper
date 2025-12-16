@@ -25,7 +25,7 @@ class FeedRepository {
     try {
       final query = _client.from('feed_items').select(
           // Include avatar_url so we can display user profile images
-          'id, content, type, like_count, repost_count, created_at, user:profiles(id, full_name, headline, role, avatar_url), comments:feed_comments(count)');
+          'id, content, type, like_count, repost_count, created_at, user:profiles(id, full_name, headline, role, location, avatar_url), comments:feed_comments(count)');
 
       if (tags != null && tags.isNotEmpty) {
         query.contains('content->tags', tags);
@@ -107,6 +107,7 @@ class FeedRepository {
     final authorName = user['full_name']?.toString();
     final authorRole = user['role']?.toString() ?? '';
     final authorAffiliation = user['headline']?.toString() ?? '';
+    final authorLocation = user['location']?.toString() ?? '';
     final avatarUrl = user['avatar_url']?.toString();
     final timeAgo = _formatTimeAgo(createdAt);
 
@@ -126,6 +127,7 @@ class FeedRepository {
         name: authorName?.isNotEmpty == true ? authorName! : 'Member',
         role: authorRole.isNotEmpty ? authorRole : 'Member',
         affiliation: authorAffiliation,
+        location: authorLocation,
         timeAgo: timeAgo,
         avatarUrl: avatarUrl?.isNotEmpty == true ? avatarUrl : null,
       ),
@@ -202,6 +204,7 @@ const _mockFeed = <FeedCardData>[
       name: 'Lina Park',
       role: 'Founder',
       affiliation: 'Northwind AI',
+      location: '',
       timeAgo: '2h',
     ),
     title: 'Northwind AI',
@@ -221,6 +224,7 @@ const _mockFeed = <FeedCardData>[
       name: 'Amir Khan',
       role: 'Founder',
       affiliation: 'Driftspace',
+      location: '',
       timeAgo: '6h',
     ),
     title: 'Weekly update',
@@ -240,6 +244,7 @@ const _mockFeed = <FeedCardData>[
       name: 'Sofia Duarte',
       role: 'Founder',
       affiliation: 'Velvet Labs',
+      location: '',
       timeAgo: '8h',
     ),
     title: 'Landing page UX teardown',
@@ -255,6 +260,7 @@ const _mockFeed = <FeedCardData>[
       name: 'Kai Müller',
       role: 'Founder',
       affiliation: 'Sunset Bio',
+      location: '',
       timeAgo: '1d',
     ),
     title: 'Sunset Bio',
@@ -274,6 +280,7 @@ const _mockFeed = <FeedCardData>[
       name: 'Amelia Cho',
       role: 'Investor',
       affiliation: 'Peak Signal',
+      location: '',
       timeAgo: '1d',
     ),
     title: 'Peak Signal — B2B infra & applied AI',
@@ -289,6 +296,7 @@ const _mockFeed = <FeedCardData>[
       name: 'Diego Rojas',
       role: 'Builder',
       affiliation: 'UX engineer',
+      location: '',
       timeAgo: '2d',
     ),
     title: 'Shipped design sprint',
@@ -306,6 +314,7 @@ const _mockFeed = <FeedCardData>[
       name: 'Priya Nair',
       role: 'Founder',
       affiliation: 'Orbitly',
+      location: '',
       timeAgo: '2d',
     ),
     title: 'User interviews (fintech operators)',
@@ -322,6 +331,7 @@ const _mockFeed = <FeedCardData>[
       name: 'Chen Wu',
       role: 'Investor',
       affiliation: 'Parallel Capital',
+      location: '',
       timeAgo: '3d',
     ),
     title: 'Parallel Capital — SaaS infra & AI tooling',
@@ -337,6 +347,7 @@ const _mockFeed = <FeedCardData>[
       name: 'Jade Ellis',
       role: 'Founder',
       affiliation: 'Tandem Labs',
+      location: '',
       timeAgo: '3d',
     ),
     title: 'Beta shipped to 40 teams',
@@ -355,6 +366,7 @@ const _mockFeed = <FeedCardData>[
       name: 'Marcos Silva',
       role: 'Founder',
       affiliation: 'Harbor',
+      location: '',
       timeAgo: '4d',
     ),
     title: 'Harbor',
