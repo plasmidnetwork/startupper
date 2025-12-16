@@ -22,6 +22,35 @@ class FeedAuthor {
   final String? avatarUrl;
 }
 
+class FeedMedia {
+  const FeedMedia({required this.url, required this.type});
+
+  final String url; // public URL to the media
+  final String type; // 'image' or 'video'
+}
+
+class FeedMediaUpload {
+  const FeedMediaUpload.bytes({
+    required this.bytes,
+    required this.filename,
+    required this.contentType,
+    required this.isVideo,
+  }) : file = null;
+
+  const FeedMediaUpload.file({
+    required this.file,
+    required this.isVideo,
+  })  : bytes = null,
+        filename = null,
+        contentType = null;
+
+  final List<int>? bytes;
+  final String? filename;
+  final String? contentType;
+  final Object? file; // File on mobile/desktop; null on web
+  final bool isVideo;
+}
+
 class MetricHighlight {
   const MetricHighlight({
     required this.label,
@@ -49,6 +78,7 @@ class FeedCardData {
     this.commentCount = 0,
     this.likeCount = 0,
     this.repostCount = 0,
+    this.media = const [],
   });
 
   final FeedCardType type;
@@ -64,4 +94,5 @@ class FeedCardData {
   final int commentCount;
   final int likeCount;
   final int repostCount;
+  final List<FeedMedia> media;
 }

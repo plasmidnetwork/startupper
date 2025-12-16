@@ -141,6 +141,17 @@ class FeedRepository {
       commentCount: commentCount,
       likeCount: likeCount,
       repostCount: repostCount,
+      media: (content['media'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (m) => FeedMedia(
+                  url: m['url']?.toString() ?? '',
+                  type: m['type']?.toString() ?? 'image',
+                ),
+              )
+              .where((m) => m.url.isNotEmpty)
+              .toList() ??
+          const [],
     );
   }
 

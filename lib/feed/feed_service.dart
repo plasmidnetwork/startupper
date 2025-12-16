@@ -1,3 +1,5 @@
+import 'dart:io' as io;
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feed_models.dart';
 import 'contact_request_models.dart';
@@ -16,6 +18,7 @@ class FeedService {
     String? reward,
     bool featured = false,
     String? userRoleTag,
+    List<FeedMedia>? media,
   }) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) {
@@ -35,6 +38,8 @@ class FeedService {
       'metrics': (metrics ?? [])
           .map((m) => {'label': m.label, 'value': m.value})
           .toList(),
+      if (media != null && media.isNotEmpty)
+        'media': media.map((m) => {'url': m.url, 'type': m.type}).toList(),
     };
 
     await _client.from('feed_items').insert({
@@ -264,5 +269,70 @@ class FeedService {
         .delete()
         .eq('id', feedItemId)
         .eq('user_id', userId);
+  }
+
+  Future<FeedMedia> uploadMedia(io.File file) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('User not signed in');
+    }
+    final ext = _fileExtension(file.path);
+    final contentType = _contentTypeForExtension(ext);
+    final isVideo = contentType.startsWith('video');
+    final path = '${userId}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final bucket = _client.storage.from('media');
+    await bucket.upload(
+      path,
+      file,
+      fileOptions: FileOptions(upsert: true, contentType: contentType),
+    );
+    final publicUrl = bucket.getPublicUrl(path);
+    return FeedMedia(url: publicUrl, type: isVideo ? 'video' : 'image');
+  }
+
+  Future<FeedMedia> uploadMediaBytes({
+    required Uint8List bytes,
+    required String filename,
+    required String contentType,
+    required bool isVideo,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('User not signed in');
+    }
+    final ext = _fileExtension(filename);
+    final path = '${userId}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final bucket = _client.storage.from('media');
+    await bucket.uploadBinary(
+      path,
+      bytes,
+      fileOptions: FileOptions(upsert: true, contentType: contentType),
+    );
+    final publicUrl = bucket.getPublicUrl(path);
+    return FeedMedia(url: publicUrl, type: isVideo ? 'video' : 'image');
+  }
+
+  String _fileExtension(String path) {
+    final dot = path.lastIndexOf('.');
+    if (dot == -1 || dot == path.length - 1) return 'bin';
+    return path.substring(dot + 1).toLowerCase();
+  }
+
+  String _contentTypeForExtension(String ext) {
+    switch (ext.toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'mp4':
+        return 'video/mp4';
+      case 'mov':
+        return 'video/quicktime';
+      default:
+        return 'application/octet-stream';
+    }
   }
 }

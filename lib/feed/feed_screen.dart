@@ -1,3 +1,5 @@
+import 'dart:io' as io;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -9,6 +11,7 @@ import '../theme/snackbar.dart';
 import '../theme/loading_overlay.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import '../app_config.dart';
 import 'contact_request_models.dart';
 
@@ -982,6 +985,7 @@ class _FeedScreenState extends State<FeedScreen> {
               metrics: payload.metrics,
               featured: payload.featured,
               userRoleTag: payload.userRoleTag,
+              media: payload.media,
             );
             await _refresh();
             if (!mounted) return;
@@ -1187,6 +1191,10 @@ class _UpdateCard extends StatelessWidget {
           if (data.ask != null) ...[
             const SizedBox(height: 10),
             _AskChip(label: data.ask!),
+          ],
+          if (data.media.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _MediaGallery(media: data.media),
           ],
           const SizedBox(height: 14),
           _EngagementCounts(
@@ -2239,6 +2247,7 @@ class _ComposePayload {
     this.metrics = const [],
     this.featured = false,
     this.userRoleTag,
+    this.media = const [],
   });
 
   final FeedCardType type;
@@ -2249,6 +2258,7 @@ class _ComposePayload {
   final List<MetricHighlight> metrics;
   final bool featured;
   final String? userRoleTag;
+  final List<FeedMedia> media;
 }
 
 class _ComposeDialog extends StatefulWidget {
@@ -2269,8 +2279,10 @@ class _ComposeDialogState extends State<_ComposeDialog> {
   final FocusNode _contentFocus = FocusNode();
   bool _posting = false;
   bool _showMoreOptions = false;
+  final List<_LocalAttachment> _attachments = [];
   static const int _maxContentLength = 3000;
   static const int _maxTags = 6;
+  static const int _maxAttachments = 4;
 
   @override
   void initState() {
@@ -2286,11 +2298,103 @@ class _ComposeDialogState extends State<_ComposeDialog> {
     _contentCtrl.dispose();
     _tagsCtrl.dispose();
     _askCtrl.dispose();
+    for (final att in _attachments) {
+      att.file?.delete().ignore();
+    }
     _contentFocus.dispose();
     super.dispose();
   }
 
-  bool get _canPost => _contentCtrl.text.trim().length >= 10;
+  bool get _canPost =>
+      _contentCtrl.text.trim().length >= 10 || _attachments.isNotEmpty;
+
+  Future<void> _pickImage() async {
+    if (_attachments.length >= _maxAttachments) {
+      _showLimitSnack();
+      return;
+    }
+    final picker = ImagePicker();
+    final file = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 2048,
+      maxHeight: 2048,
+      imageQuality: 85,
+    );
+    if (file == null) return;
+    if (kIsWeb) {
+      final bytes = await file.readAsBytes();
+      setState(() {
+        _attachments.add(_LocalAttachment(
+          bytes: bytes,
+          filename: file.name,
+          contentType: 'image/${file.name.toLowerCase().endsWith('png') ? 'png' : 'jpeg'}',
+          isVideo: false,
+        ));
+      });
+    } else {
+      setState(() {
+        _attachments.add(
+          _LocalAttachment(file: io.File(file.path), isVideo: false),
+        );
+      });
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    if (_attachments.length >= _maxAttachments) {
+      _showLimitSnack();
+      return;
+    }
+    final picker = ImagePicker();
+    final file = await picker.pickVideo(source: ImageSource.gallery);
+    if (file == null) return;
+    if (kIsWeb) {
+      final bytes = await file.readAsBytes();
+      final name = file.name;
+      final ext = name.split('.').last.toLowerCase();
+      setState(() {
+        _attachments.add(
+          _LocalAttachment(
+            bytes: bytes,
+            filename: name,
+            contentType: 'video/$ext',
+            isVideo: true,
+          ),
+        );
+      });
+    } else {
+      setState(() {
+        _attachments.add(_LocalAttachment(file: io.File(file.path), isVideo: true));
+      });
+    }
+  }
+
+  void _showLimitSnack() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Limit $_maxAttachments attachments')),
+    );
+  }
+
+  Future<List<FeedMedia>> _uploadAttachments() async {
+    if (_attachments.isEmpty) return [];
+    final service = FeedService();
+    final uploaded = <FeedMedia>[];
+    for (final att in _attachments) {
+      if (att.bytes != null) {
+        uploaded.add(
+          await service.uploadMediaBytes(
+            bytes: att.bytes!,
+            filename: att.filename ?? 'upload.bin',
+            contentType: att.contentType ?? 'application/octet-stream',
+            isVideo: att.isVideo,
+          ),
+        );
+      } else if (att.file != null) {
+        uploaded.add(await service.uploadMedia(att.file!));
+      }
+    }
+    return uploaded;
+  }
 
   Future<void> _handlePost() async {
     if (_posting || !_canPost) return;
@@ -2313,8 +2417,6 @@ class _ComposeDialogState extends State<_ComposeDialog> {
     }
 
     // Extract title from first line, rest goes to subtitle
-    // If single line: title only, subtitle empty
-    // If multi-line: first line = title, rest = subtitle
     final lines = content.split('\n');
     final firstLine = lines.first.trim();
     final hasMultipleLines = lines.length > 1;
@@ -2323,31 +2425,39 @@ class _ComposeDialogState extends State<_ComposeDialog> {
     String subtitle;
 
     if (hasMultipleLines) {
-      // Multi-line: first line is title, rest is subtitle
       title = firstLine.length <= 80
           ? firstLine
           : '${firstLine.substring(0, 77)}...';
       subtitle = lines.skip(1).join('\n').trim();
     } else {
-      // Single line: use as subtitle only (no separate title)
-      title = '';
-      subtitle = content;
+      title = firstLine.length <= 80 ? firstLine : '${firstLine.substring(0, 77)}...';
+      subtitle = '';
     }
 
-    final payload = _ComposePayload(
-      type: FeedCardType.update,
-      title: title,
-      subtitle: subtitle,
-      ask: _askCtrl.text.trim().isEmpty ? null : _askCtrl.text.trim(),
-      tags: tags,
-      metrics: const [],
-      featured: false,
-      // Removed auto-tagging of user role (e.g., #Investor, #Founder)
-      userRoleTag: null,
-    );
+    try {
+      final uploadedMedia = await _uploadAttachments();
+      final payload = _ComposePayload(
+        type: FeedCardType.update,
+        title: title,
+        subtitle: subtitle.isNotEmpty ? subtitle : title,
+        ask: _askCtrl.text.trim().isEmpty ? null : _askCtrl.text.trim(),
+        tags: tags,
+        metrics: const [],
+        featured: false,
+        userRoleTag: null,
+        media: uploadedMedia,
+      );
 
-    await widget.onPost(payload);
-    if (mounted) Navigator.pop(context);
+      await widget.onPost(payload);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        showErrorSnackBar(
+            context, 'Could not post right now. ${e.toString()}');
+      }
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
   }
 
   @override
@@ -2383,7 +2493,7 @@ class _ComposeDialogState extends State<_ComposeDialog> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // User avatar
                   CircleAvatar(
@@ -2404,35 +2514,13 @@ class _ComposeDialogState extends State<_ComposeDialog> {
                         : null,
                   ),
                   const SizedBox(width: 12),
-                  // Name and visibility
+                  // Name
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              userName,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.arrow_drop_down,
-                              size: 20,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Post to Anyone',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      userName,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   // Close button
@@ -2525,6 +2613,75 @@ class _ComposeDialogState extends State<_ComposeDialog> {
                       ),
                     ],
 
+                    if (_attachments.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                    children: _attachments
+                        .map(
+                          (att) => Stack(
+                            alignment: Alignment.topRight,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  width: 96,
+                                  height: 96,
+                                  color: theme.colorScheme.surfaceVariant,
+                                  child: att.isVideo
+                                      ? Center(
+                                          child: Icon(Icons.videocam,
+                                              color: theme.colorScheme.primary),
+                                        )
+                                      : att.bytes != null
+                                          ? Image.memory(
+                                              att.bytes!,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : att.file != null
+                                              ? Image.file(
+                                                  att.file!,
+                                                  fit: BoxFit.cover,
+                                                )
+                                              : const SizedBox.shrink(),
+                                ),
+                              ),
+                                  Positioned(
+                                    top: -6,
+                                    right: -6,
+                                    child: IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      constraints: const BoxConstraints(),
+                                      iconSize: 18,
+                                      padding: EdgeInsets.zero,
+                                      onPressed: () {
+                                        setState(() {
+                                          _attachments.remove(att);
+                                        });
+                                      },
+                                      icon: Container(
+                                        decoration: BoxDecoration(
+                                          color: theme.colorScheme.surface,
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              blurRadius: 4,
+                                              color: Colors.black.withOpacity(0.15),
+                                            )
+                                          ],
+                                        ),
+                                        child: const Icon(Icons.close, size: 16),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ],
+
                     const SizedBox(height: 16),
                   ],
                 ),
@@ -2560,14 +2717,18 @@ class _ComposeDialogState extends State<_ComposeDialog> {
 
                   // Media button
                   IconButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Media upload coming soon')),
-                      );
-                    },
+                    onPressed: _pickImage,
                     icon: const Icon(Icons.image_outlined),
-                    tooltip: 'Add media',
+                    tooltip: 'Add image',
+                    style: IconButton.styleFrom(
+                      foregroundColor: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+
+                  IconButton(
+                    onPressed: _pickVideo,
+                    icon: const Icon(Icons.videocam_outlined),
+                    tooltip: 'Add video',
                     style: IconButton.styleFrom(
                       foregroundColor: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -2637,6 +2798,73 @@ class _ComposeDialogState extends State<_ComposeDialog> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _LocalAttachment {
+  _LocalAttachment({
+    this.file,
+    this.bytes,
+    this.filename,
+    this.contentType,
+    this.isVideo = false,
+  });
+
+  final io.File? file;
+  final Uint8List? bytes;
+  final String? filename;
+  final String? contentType;
+  final bool isVideo;
+}
+
+class _MediaGallery extends StatelessWidget {
+  const _MediaGallery({required this.media});
+
+  final List<FeedMedia> media;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: media
+          .map(
+            (m) => ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: 110,
+                height: 110,
+                color: theme.colorScheme.surfaceVariant,
+                child: m.type == 'video'
+                    ? Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Container(
+                            color: theme.colorScheme.surfaceVariant,
+                          ),
+                          Center(
+                            child: Icon(
+                              Icons.play_circle_fill,
+                              size: 36,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Image.network(
+                        m.url,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Center(
+                          child: Icon(Icons.broken_image,
+                              color: theme.colorScheme.outline),
+                        ),
+                      ),
+              ),
+            ),
+          )
+          .toList(),
     );
   }
 }
