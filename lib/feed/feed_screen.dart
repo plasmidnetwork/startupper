@@ -64,6 +64,8 @@ class _FeedScreenState extends State<FeedScreen> {
     if (!mounted) return;
     await _loadUserRole();
     if (!mounted) return;
+    await _loadUserProfile();
+    if (!mounted) return;
     await _loadInitial();
   }
 
@@ -318,7 +320,8 @@ class _FeedScreenState extends State<FeedScreen> {
         setState(() {
           _userRole = role;
         });
-        if (_prefs == null || (_prefs?.getStringList('feed_filters')?.isEmpty ?? true)) {
+        if (_prefs == null ||
+            (_prefs?.getStringList('feed_filters')?.isEmpty ?? true)) {
           _applyRoleDefaults(role);
         }
         if (_activeFilters.contains('Personalized')) {
@@ -519,8 +522,9 @@ class _FeedScreenState extends State<FeedScreen> {
             tags: _items[index].tags,
             reward: _items[index].reward,
             featured: _items[index].featured,
-            commentCount:
-                result['commentCount'] is int ? result['commentCount'] : _items[index].commentCount,
+            commentCount: result['commentCount'] is int
+                ? result['commentCount']
+                : _items[index].commentCount,
             likeCount: result['likeCount'] is int
                 ? result['likeCount']
                 : _items[index].likeCount,
@@ -542,7 +546,8 @@ class _FeedScreenState extends State<FeedScreen> {
   }
 
   void _openIntros({int initialTab = 0}) {
-    Navigator.pushNamed(context, '/intros', arguments: {'initialTab': initialTab});
+    Navigator.pushNamed(context, '/intros',
+        arguments: {'initialTab': initialTab});
   }
 
   Future<void> _copyFeedLink({bool useWeb = false}) async {
@@ -550,8 +555,8 @@ class _FeedScreenState extends State<FeedScreen> {
         ? kFeedWebLinkBase
         : kFeedLinkBase;
     if (useWeb && kFeedWebLinkBase.isEmpty) {
-      showErrorSnackBar(
-          context, 'Web link base not set. Set FEED_WEB_LINK_BASE or copy app link.');
+      showErrorSnackBar(context,
+          'Web link base not set. Set FEED_WEB_LINK_BASE or copy app link.');
     }
     final base = rawBase.endsWith('/') ? rawBase : '$rawBase/';
     final link = base;
@@ -860,7 +865,8 @@ class _FeedScreenState extends State<FeedScreen> {
                         final introStatus = item.author.id != null
                             ? _introStatusByTarget[item.author.id!]
                             : null;
-                        final introPending = introStatus == ContactRequestStatus.pending ||
+                        final introPending = introStatus ==
+                                ContactRequestStatus.pending ||
                             (introStatus == null &&
                                 item.author.id != null &&
                                 _pendingIntroTargets.contains(item.author.id));
@@ -940,11 +946,26 @@ class _FeedScreenState extends State<FeedScreen> {
     );
   }
 
+  Map<String, dynamic>? _userProfile;
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final profile = await _profileService.fetchProfile();
+      if (mounted && profile != null) {
+        setState(() => _userProfile = profile);
+      }
+    } catch (_) {
+      // Ignore profile fetch errors
+    }
+  }
+
   void _openComposeDialog() {
     showDialog(
       context: context,
+      barrierDismissible: true,
       builder: (context) => _ComposeDialog(
         userRole: _userRole,
+        userProfile: _userProfile,
         onPost: (payload) async {
           if (!_isLoggedIn) {
             if (!mounted) return;
@@ -958,7 +979,6 @@ class _FeedScreenState extends State<FeedScreen> {
               subtitle: payload.subtitle,
               ask: payload.ask,
               tags: payload.tags,
-              reward: payload.reward,
               metrics: payload.metrics,
               featured: payload.featured,
               userRoleTag: payload.userRoleTag,
@@ -979,155 +999,7 @@ class _FeedScreenState extends State<FeedScreen> {
   }
 }
 
-class _PreviewCard extends StatelessWidget {
-  const _PreviewCard({
-    required this.type,
-    required this.title,
-    required this.subtitle,
-    required this.tags,
-    this.ask,
-    this.reward,
-    this.featured = false,
-    this.userRole,
-  });
-
-  final FeedCardType type;
-  final String title;
-  final String subtitle;
-  final List<String> tags;
-  final String? ask;
-  final String? reward;
-  final bool featured;
-  final String? userRole;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final previewTags = {
-      ...tags,
-      if (userRole != null && userRole!.isNotEmpty) userRole!,
-    }.toList();
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Preview',
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                Chip(
-                  label: Text(type.name),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              subtitle,
-              style: theme.textTheme.bodyMedium,
-            ),
-            if (ask != null) ...[
-              const SizedBox(height: 8),
-              _AskChip(label: ask!),
-            ],
-            if (reward != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                reward!,
-                style: theme.textTheme.labelMedium,
-              ),
-            ],
-            if (previewTags.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: previewTags
-                    .map((t) => Chip(
-                          label: Text(t),
-                          visualDensity: VisualDensity.compact,
-                        ))
-                    .toList(),
-              ),
-            ],
-            if (featured) ...[
-              const SizedBox(height: 10),
-              Text(
-                'Featured',
-                style: theme.textTheme.labelMedium
-                    ?.copyWith(color: theme.colorScheme.primary),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TypeSelector extends StatelessWidget {
-  const _TypeSelector({required this.value, required this.onChanged});
-
-  final FeedCardType value;
-  final ValueChanged<FeedCardType> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    const types = [FeedCardType.update]; // beta: only update posts
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Type', style: theme.textTheme.labelLarge),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: types
-              .map(
-                (t) => ChoiceChip(
-                  label: Text(t.name),
-                  selected: value == t,
-                  onSelected: (_) => onChanged(t),
-                  selectedColor: theme.colorScheme.primary.withValues(alpha: 0.12),
-                  labelStyle: theme.textTheme.labelLarge?.copyWith(
-                    color: value == t
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurface,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              )
-              .toList(),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Only updates for beta. Other post types coming soon.',
-          style:
-              theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
-        ),
-      ],
-    );
-  }
-}
+// LinkedIn-style compose dialog uses inline text area instead of preview cards
 
 class FeedCard extends StatelessWidget {
   const FeedCard({
@@ -1240,7 +1112,14 @@ Widget _linkedCardShell(
 
 class _UpdateCard extends StatelessWidget {
   const _UpdateCard(
-      {required this.data, this.onAuthorTap, this.onTap, this.onComment, this.onLike, this.isLiked = false, this.likeCountOverride, this.onDelete});
+      {required this.data,
+      this.onAuthorTap,
+      this.onTap,
+      this.onComment,
+      this.onLike,
+      this.isLiked = false,
+      this.likeCountOverride,
+      this.onDelete});
 
   final FeedCardData data;
   final VoidCallback? onAuthorTap;
@@ -1261,7 +1140,8 @@ class _UpdateCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _PostHeader(author: data.author, onTap: onAuthorTap, onDelete: onDelete),
+          _PostHeader(
+              author: data.author, onTap: onAuthorTap, onDelete: onDelete),
           const SizedBox(height: 12),
           if (data.title.isNotEmpty) ...[
             Text(
@@ -1273,8 +1153,8 @@ class _UpdateCard extends StatelessWidget {
           ],
           Text(
             data.subtitle,
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(height: 1.4, fontSize: 15),
+            style:
+                theme.textTheme.bodyMedium?.copyWith(height: 1.4, fontSize: 15),
           ),
           if (data.tags.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -1336,7 +1216,14 @@ class _UpdateCard extends StatelessWidget {
 
 class _HighlightCard extends StatelessWidget {
   const _HighlightCard(
-      {required this.data, this.onAuthorTap, this.onTap, this.onComment, this.onLike, this.isLiked = false, this.likeCountOverride, this.onDelete});
+      {required this.data,
+      this.onAuthorTap,
+      this.onTap,
+      this.onComment,
+      this.onLike,
+      this.isLiked = false,
+      this.likeCountOverride,
+      this.onDelete});
 
   final FeedCardData data;
   final VoidCallback? onAuthorTap;
@@ -1360,12 +1247,13 @@ class _HighlightCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _PostHeader(author: data.author, onTap: onAuthorTap, onDelete: onDelete),
+          _PostHeader(
+              author: data.author, onTap: onAuthorTap, onDelete: onDelete),
           const SizedBox(height: 12),
           Text(
             data.title,
-            style:
-                theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           Text(
@@ -1380,8 +1268,8 @@ class _HighlightCard extends StatelessWidget {
               children: data.tags
                   .map(
                     (tag) => Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(16),
@@ -1460,12 +1348,13 @@ class _MissionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-            _PostHeader(author: data.author, onTap: onAuthorTap, onDelete: onDelete),
+          _PostHeader(
+              author: data.author, onTap: onAuthorTap, onDelete: onDelete),
           const SizedBox(height: 10),
           Text(
             data.title,
-            style:
-                theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           Text(
@@ -1480,8 +1369,8 @@ class _MissionCard extends StatelessWidget {
               children: data.tags
                   .map(
                     (tag) => Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(16),
@@ -1666,8 +1555,8 @@ class _InvestorCardState extends State<_InvestorCard> {
           const SizedBox(height: 10),
           Text(
             data.title,
-            style:
-                theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           Text(
@@ -1682,80 +1571,80 @@ class _InvestorCardState extends State<_InvestorCard> {
               children: data.tags
                   .map(
                     (tag) => Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         color: accent.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Text(
                         tag,
-                        style: theme.textTheme.labelLarge
-                            ?.copyWith(fontWeight: FontWeight.w600, color: accent),
+                        style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600, color: accent),
                       ),
                     ),
                   )
                   .toList(),
             ),
           ],
-        if (data.ask != null) ...[
-          const SizedBox(height: 10),
-          _AskChip(label: data.ask!),
-        ],
-        const SizedBox(height: 12),
-        _EngagementCounts(
-          likeCount: likeCount,
-          commentCount: data.commentCount,
-          accent: accent,
-        ),
-        const Divider(height: 24),
-        Row(
-          children: [
-            if (!disabled) ...[
+          if (data.ask != null) ...[
+            const SizedBox(height: 10),
+            _AskChip(label: data.ask!),
+          ],
+          const SizedBox(height: 12),
+          _EngagementCounts(
+            likeCount: likeCount,
+            commentCount: data.commentCount,
+            accent: accent,
+          ),
+          const Divider(height: 24),
+          Row(
+            children: [
+              if (!disabled) ...[
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _handleRequestIntro,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 12,
+                      ),
+                    ),
+                    child: _requesting
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Request intro'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
               Expanded(
-                child: ElevatedButton(
-                  onPressed: _handleRequestIntro,
-                  style: ElevatedButton.styleFrom(
+                child: OutlinedButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('One-pager shared')),
+                    );
+                  },
+                  style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 18,
                       vertical: 12,
                     ),
                   ),
-                  child: _requesting
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Request intro'),
+                  child: const Text('Share'),
                 ),
               ),
-              const SizedBox(width: 12),
             ],
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('One-pager shared')),
-                  );
-                },
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 12,
-                  ),
-                ),
-                child: const Text('Share'),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        ActionBar(
-          accent: accent,
-          onComment: widget.onComment,
-          commentCount: data.commentCount,
-          onLike: widget.onLike,
+          ),
+          const SizedBox(height: 10),
+          ActionBar(
+            accent: accent,
+            onComment: widget.onComment,
+            commentCount: data.commentCount,
+            onLike: widget.onLike,
             isLiked: widget.isLiked,
           ),
         ],
@@ -1913,7 +1802,8 @@ class _PostHeader extends StatelessWidget {
                         onTap: () {
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Author muted (placeholder)')),
+                            const SnackBar(
+                                content: Text('Author muted (placeholder)')),
                           );
                         },
                       ),
@@ -1923,7 +1813,9 @@ class _PostHeader extends StatelessWidget {
                         onTap: () {
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Report submitted (placeholder)')),
+                            const SnackBar(
+                                content:
+                                    Text('Report submitted (placeholder)')),
                           );
                         },
                       ),
@@ -1943,14 +1835,17 @@ class _PostHeader extends StatelessWidget {
                                         'This will remove your post permanently.'),
                                     actions: [
                                       TextButton(
-                                        onPressed: () => Navigator.pop(context, false),
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
                                         child: const Text('Cancel'),
                                       ),
                                       TextButton(
-                                        onPressed: () => Navigator.pop(context, true),
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
                                         style: TextButton.styleFrom(
-                                          foregroundColor:
-                                              Theme.of(context).colorScheme.error,
+                                          foregroundColor: Theme.of(context)
+                                              .colorScheme
+                                              .error,
                                         ),
                                         child: const Text('Delete'),
                                       ),
@@ -2147,8 +2042,7 @@ class _EngagementCounts extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
-    final commentLabel =
-        '$commentCount comment${commentCount == 1 ? '' : 's'}';
+    final commentLabel = '$commentCount comment${commentCount == 1 ? '' : 's'}';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -2203,7 +2097,10 @@ class _FeaturedCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
-          colors: [accent.withValues(alpha: 0.16), accent.withValues(alpha: 0.04)],
+          colors: [
+            accent.withValues(alpha: 0.16),
+            accent.withValues(alpha: 0.04)
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -2340,7 +2237,6 @@ class _ComposePayload {
     this.ask,
     this.tags = const [],
     this.metrics = const [],
-    this.reward,
     this.featured = false,
     this.userRoleTag,
   });
@@ -2351,74 +2247,63 @@ class _ComposePayload {
   final String? ask;
   final List<String> tags;
   final List<MetricHighlight> metrics;
-  final String? reward;
   final bool featured;
   final String? userRoleTag;
 }
 
 class _ComposeDialog extends StatefulWidget {
-  const _ComposeDialog({required this.onPost, this.userRole});
+  const _ComposeDialog({required this.onPost, this.userRole, this.userProfile});
 
   final Future<void> Function(_ComposePayload) onPost;
   final String? userRole;
+  final Map<String, dynamic>? userProfile;
 
   @override
   State<_ComposeDialog> createState() => _ComposeDialogState();
 }
 
 class _ComposeDialogState extends State<_ComposeDialog> {
-  static const List<FeedCardType> _allowedTypes = [FeedCardType.update];
-  final _formKey = GlobalKey<FormState>();
-  FeedCardType _type = FeedCardType.update;
-  final _titleCtrl = TextEditingController();
-  final _subtitleCtrl = TextEditingController();
-  final _askCtrl = TextEditingController();
+  final _contentCtrl = TextEditingController();
   final _tagsCtrl = TextEditingController();
-  final _rewardCtrl = TextEditingController();
-  bool _featured = false;
+  final _askCtrl = TextEditingController();
+  final FocusNode _contentFocus = FocusNode();
   bool _posting = false;
+  bool _showMoreOptions = false;
+  static const int _maxContentLength = 3000;
   static const int _maxTags = 6;
 
   @override
   void initState() {
     super.initState();
-    _titleCtrl.addListener(_updatePreview);
-    _subtitleCtrl.addListener(_updatePreview);
-    _askCtrl.addListener(_updatePreview);
-    _tagsCtrl.addListener(_updatePreview);
-    _rewardCtrl.addListener(_updatePreview);
+    // Auto-focus the content field when dialog opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _contentFocus.requestFocus();
+    });
   }
 
   @override
   void dispose() {
-    _titleCtrl.removeListener(_updatePreview);
-    _subtitleCtrl.removeListener(_updatePreview);
-    _askCtrl.removeListener(_updatePreview);
-    _tagsCtrl.removeListener(_updatePreview);
-    _rewardCtrl.removeListener(_updatePreview);
-    _titleCtrl.dispose();
-    _subtitleCtrl.dispose();
-    _askCtrl.dispose();
+    _contentCtrl.dispose();
     _tagsCtrl.dispose();
-    _rewardCtrl.dispose();
+    _askCtrl.dispose();
+    _contentFocus.dispose();
     super.dispose();
   }
 
-  void _updatePreview() {
-    setState(() {});
-  }
+  bool get _canPost => _contentCtrl.text.trim().length >= 10;
 
   Future<void> _handlePost() async {
-    if (_posting) return;
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() {
-      _posting = true;
-    });
+    if (_posting || !_canPost) return;
+
+    setState(() => _posting = true);
+
+    final content = _contentCtrl.text.trim();
     final tags = _tagsCtrl.text
         .split(',')
         .map((t) => t.trim())
         .where((t) => t.isNotEmpty)
         .toList();
+
     if (tags.length > _maxTags) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Limit to $_maxTags tags')),
@@ -2426,73 +2311,25 @@ class _ComposeDialogState extends State<_ComposeDialog> {
       setState(() => _posting = false);
       return;
     }
+
+    // Extract title from first line if it's short enough, otherwise use truncated content
+    final lines = content.split('\n');
+    final firstLine = lines.first.trim();
+    final title =
+        firstLine.length <= 80 ? firstLine : '${firstLine.substring(0, 77)}...';
+    final subtitle =
+        lines.length > 1 ? lines.skip(1).join('\n').trim() : content;
+
     final payload = _ComposePayload(
-      type: _type,
-      title: _titleCtrl.text.trim(),
-      subtitle: _subtitleCtrl.text.trim(),
+      type: FeedCardType.update,
+      title: title,
+      subtitle: subtitle.isEmpty ? content : subtitle,
       ask: _askCtrl.text.trim().isEmpty ? null : _askCtrl.text.trim(),
       tags: tags,
-      reward: _rewardCtrl.text.trim().isEmpty ? null : _rewardCtrl.text.trim(),
       metrics: const [],
-      featured: _featured,
+      featured: false,
       userRoleTag: widget.userRole,
     );
-    final shouldPost = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Post this update?'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Type: ${payload.type.name}'),
-                const SizedBox(height: 8),
-                Text('Title: ${payload.title}'),
-                const SizedBox(height: 4),
-                Text(
-                  payload.subtitle,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                if (payload.ask != null) ...[
-                  const SizedBox(height: 8),
-                  Text('Ask: ${payload.ask}'),
-                ],
-                if (payload.reward != null) ...[
-                  const SizedBox(height: 4),
-                  Text('Reward: ${payload.reward}'),
-                ],
-                if (payload.tags.isNotEmpty || payload.userRoleTag != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Tags: ${(payload.tags + (payload.userRoleTag != null ? [
-                        payload.userRoleTag!
-                      ] : [])).join(', ')}',
-                  ),
-                ],
-                if (payload.featured) ...[
-                  const SizedBox(height: 8),
-                  const Text('Featured'),
-                ],
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Post'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-
-    if (!shouldPost) {
-      setState(() => _posting = false);
-      return;
-    }
 
     await widget.onPost(payload);
     if (mounted) Navigator.pop(context);
@@ -2500,137 +2337,293 @@ class _ComposeDialogState extends State<_ComposeDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Post to feed'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_allowedTypes.length > 1) ...[
-                _TypeSelector(
-                  value: _type,
-                  onChanged: (val) => setState(() => _type = val),
-                ),
-                const SizedBox(height: 16),
-              ],
-              TextFormField(
-                controller: _titleCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                  border: OutlineInputBorder(),
-                ),
-                maxLength: 80,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return 'Title is required';
-                  }
-                  if (v.trim().length < 4) {
-                    return 'Title too short';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _subtitleCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Subtitle',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-                maxLength: 280,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return 'Subtitle is required';
-                  }
-                  if (v.trim().length < 8) {
-                    return 'Subtitle too short';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _askCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Ask (optional)',
-                  border: OutlineInputBorder(),
-                ),
-                maxLength: 140,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _tagsCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Tags (comma-separated)',
-                  border: const OutlineInputBorder(),
-                  helperText: widget.userRole == null
-                      ? null
-                      : 'Your role "${widget.userRole}" will be auto-tagged',
-                ),
-                maxLength: 120,
-              ),
-              const SizedBox(height: 12),
-              if (_type == FeedCardType.mission || _type == FeedCardType.highlight)
-                ...[
-                  TextFormField(
-                    controller: _rewardCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Reward (optional)',
-                      border: OutlineInputBorder(),
+    final theme = Theme.of(context);
+    final screenSize = MediaQuery.of(context).size;
+    final isDesktop = screenSize.width > 600;
+
+    // Get user info from profile
+    final userName = widget.userProfile?['full_name']?.toString() ?? 'You';
+    final avatarUrl = widget.userProfile?['avatar_url']?.toString();
+    final userInitial = userName.isNotEmpty ? userName[0].toUpperCase() : '?';
+
+    return Dialog(
+      backgroundColor: theme.colorScheme.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? (screenSize.width - 560) / 2 : 16,
+        vertical: 24,
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 560,
+          maxHeight: screenSize.height * 0.85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header with avatar, name, and close button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // User avatar
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: theme.colorScheme.primaryContainer,
+                    backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
+                        ? NetworkImage(avatarUrl)
+                        : null,
+                    child: avatarUrl == null || avatarUrl.isEmpty
+                        ? Text(
+                            userInitial,
+                            style: TextStyle(
+                              color: theme.colorScheme.onPrimaryContainer,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 12),
+                  // Name and visibility
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              userName,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.arrow_drop_down,
+                              size: 20,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Post to Anyone',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  // Close button
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Close',
+                    style: IconButton.styleFrom(
+                      foregroundColor: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ],
-              SwitchListTile(
-                value: _featured,
-                onChanged: (val) => setState(() => _featured = val),
-                title: const Text('Featured'),
-                contentPadding: EdgeInsets.zero,
               ),
-              const SizedBox(height: 16),
-              _PreviewCard(
-                type: _type,
-                title: _titleCtrl.text.trim().isEmpty
-                    ? 'Preview title'
-                    : _titleCtrl.text.trim(),
-                subtitle: _subtitleCtrl.text.trim().isEmpty
-                    ? 'Preview subtitle'
-                    : _subtitleCtrl.text.trim(),
-                ask: _askCtrl.text.trim().isEmpty ? null : _askCtrl.text.trim(),
-                tags: _tagsCtrl.text
-                    .split(',')
-                    .map((t) => t.trim())
-                    .where((t) => t.isNotEmpty)
-                    .toList(),
-                reward: _rewardCtrl.text.trim().isEmpty
-                    ? null
-                    : _rewardCtrl.text.trim(),
-                featured: _featured,
-                userRole: widget.userRole,
+            ),
+
+            const SizedBox(height: 8),
+
+            // Main content area
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Main text input - borderless, like LinkedIn
+                    TextField(
+                      controller: _contentCtrl,
+                      focusNode: _contentFocus,
+                      maxLines: null,
+                      minLines: 6,
+                      maxLength: _maxContentLength,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontSize: 16,
+                        height: 1.5,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'What do you want to talk about?',
+                        hintStyle: theme.textTheme.bodyLarge?.copyWith(
+                          fontSize: 16,
+                          color: theme.colorScheme.onSurfaceVariant
+                              .withOpacity(0.7),
+                        ),
+                        border: InputBorder.none,
+                        counterText: '', // Hide character counter
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+
+                    // Expandable "More options" section
+                    if (_showMoreOptions) ...[
+                      const SizedBox(height: 16),
+                      Divider(color: theme.colorScheme.outlineVariant),
+                      const SizedBox(height: 16),
+
+                      // Ask field
+                      TextField(
+                        controller: _askCtrl,
+                        maxLength: 140,
+                        decoration: InputDecoration(
+                          labelText: 'Ask (optional)',
+                          hintText: 'What are you looking for?',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Tags field
+                      TextField(
+                        controller: _tagsCtrl,
+                        maxLength: 120,
+                        decoration: InputDecoration(
+                          labelText: 'Tags',
+                          hintText: 'AI, Fintech, Seed...',
+                          helperText: widget.userRole != null
+                              ? 'Your role "${widget.userRole}" will be auto-tagged'
+                              : 'Comma-separated',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 16),
+                  ],
+                ),
               ),
-            ],
-          ),
+            ),
+
+            // Bottom toolbar
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: theme.colorScheme.outlineVariant.withOpacity(0.5),
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  // Emoji button
+                  IconButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Emoji picker coming soon')),
+                      );
+                    },
+                    icon: const Icon(Icons.emoji_emotions_outlined),
+                    tooltip: 'Add emoji',
+                    style: IconButton.styleFrom(
+                      foregroundColor: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+
+                  // Media button
+                  IconButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Media upload coming soon')),
+                      );
+                    },
+                    icon: const Icon(Icons.image_outlined),
+                    tooltip: 'Add media',
+                    style: IconButton.styleFrom(
+                      foregroundColor: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+
+                  // More options button
+                  IconButton(
+                    onPressed: () {
+                      setState(() => _showMoreOptions = !_showMoreOptions);
+                    },
+                    icon: Icon(
+                      _showMoreOptions ? Icons.tune : Icons.add,
+                      color: _showMoreOptions
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                    tooltip: _showMoreOptions ? 'Hide options' : 'More options',
+                    style: IconButton.styleFrom(
+                      foregroundColor: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+
+                  const Spacer(),
+
+                  // Character count (subtle)
+                  if (_contentCtrl.text.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Text(
+                        '${_contentCtrl.text.length}/$_maxContentLength',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color:
+                              _contentCtrl.text.length > _maxContentLength * 0.9
+                                  ? theme.colorScheme.error
+                                  : theme.colorScheme.onSurfaceVariant
+                                      .withOpacity(0.6),
+                        ),
+                      ),
+                    ),
+
+                  // Post button
+                  FilledButton(
+                    onPressed: _posting || !_canPost ? null : _handlePost,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    child: _posting
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Post'),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _posting ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _posting ? null : _handlePost,
-          child: _posting
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Post'),
-        ),
-      ],
     );
   }
 }
@@ -2707,30 +2700,6 @@ Color _roleAccent(String role, ThemeData theme) {
   }
 }
 
-String _chipLabel(ContactRequestStatus? status) {
-  switch (status) {
-    case ContactRequestStatus.accepted:
-      return 'Intro accepted';
-    case ContactRequestStatus.declined:
-      return 'Intro declined';
-    case ContactRequestStatus.pending:
-    case null:
-      return 'Intro sent';
-  }
-}
-
-Color _chipColor(ContactRequestStatus? status, Color accent) {
-  switch (status) {
-    case ContactRequestStatus.accepted:
-      return Colors.green.withValues(alpha: 0.14);
-    case ContactRequestStatus.declined:
-      return Colors.red.withValues(alpha: 0.14);
-    case ContactRequestStatus.pending:
-    case null:
-      return accent.withValues(alpha: 0.14);
-  }
-}
-
 class _FeedSkeleton extends StatelessWidget {
   const _FeedSkeleton();
 
@@ -2778,9 +2747,10 @@ class _RoleDetailChips extends StatelessWidget {
     } else if (r == 'founder') {
       final stage = details['stage']?.toString();
       final startup = details['startup_name']?.toString();
-      final looking =
-          (details['looking_for'] as List?)?.map((e) => e.toString()).toList() ??
-              [];
+      final looking = (details['looking_for'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [];
       if (startup != null && startup.isNotEmpty) chips.add(_chip(startup));
       if (stage != null && stage.isNotEmpty) chips.add(_chip('Stage: $stage'));
       if (looking.isNotEmpty) {
