@@ -2312,18 +2312,32 @@ class _ComposeDialogState extends State<_ComposeDialog> {
       return;
     }
 
-    // Extract title from first line if it's short enough, otherwise use truncated content
+    // Extract title from first line, rest goes to subtitle
+    // If single line: title only, subtitle empty
+    // If multi-line: first line = title, rest = subtitle
     final lines = content.split('\n');
     final firstLine = lines.first.trim();
-    final title =
-        firstLine.length <= 80 ? firstLine : '${firstLine.substring(0, 77)}...';
-    final subtitle =
-        lines.length > 1 ? lines.skip(1).join('\n').trim() : content;
+    final hasMultipleLines = lines.length > 1;
+
+    String title;
+    String subtitle;
+
+    if (hasMultipleLines) {
+      // Multi-line: first line is title, rest is subtitle
+      title = firstLine.length <= 80
+          ? firstLine
+          : '${firstLine.substring(0, 77)}...';
+      subtitle = lines.skip(1).join('\n').trim();
+    } else {
+      // Single line: use as subtitle only (no separate title)
+      title = '';
+      subtitle = content;
+    }
 
     final payload = _ComposePayload(
       type: FeedCardType.update,
       title: title,
-      subtitle: subtitle.isEmpty ? content : subtitle,
+      subtitle: subtitle,
       ask: _askCtrl.text.trim().isEmpty ? null : _askCtrl.text.trim(),
       tags: tags,
       metrics: const [],
