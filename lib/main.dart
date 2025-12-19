@@ -18,6 +18,8 @@ import 'feed/feed_models.dart';
 import 'feed/contact_request_models.dart';
 import 'feed/intro_chat_screen.dart';
 import 'startups/startup_discovery_screen.dart';
+import 'startups/startup_edit_screen.dart';
+import 'startups/startup_detail_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -167,6 +169,20 @@ class _StartupperAppState extends State<StartupperApp> {
         '/onboarding/end_user': (context) => const EndUserOnboardingScreen(),
         '/feed': (context) => const FeedScreen(),
         '/startups': (context) => const StartupDiscoveryScreen(),
+        '/startups/edit': (context) => const StartupEditScreen(),
+        '/startups/detail': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          String? id;
+          if (args is Map && args['id'] != null) {
+            id = args['id']?.toString();
+          }
+          if (id == null || id.isEmpty) {
+            return const Scaffold(
+              body: Center(child: Text('Missing startup id')),
+            );
+          }
+          return StartupDetailScreen(startupId: id);
+        },
         '/profile': (context) => const ProfileScreen(),
         '/intros': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
@@ -180,14 +196,14 @@ class _StartupperAppState extends State<StartupperApp> {
           final args = ModalRoute.of(context)?.settings.arguments;
           if (args is! Map) {
             return const Scaffold(
-              body: Center(child: Text('Missing intro chat args')),
+              body: Center(child: Text('Missing connection chat args')),
             );
           }
           final introId = args['introId']?.toString();
           final other = args['other'];
           if (introId == null || other is! ContactRequestParty) {
             return const Scaffold(
-              body: Center(child: Text('Missing intro chat args')),
+              body: Center(child: Text('Missing connection chat args')),
             );
           }
           return IntroChatScreen(introId: introId, other: other);

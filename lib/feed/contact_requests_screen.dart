@@ -23,14 +23,15 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
   final Set<String> _introDisabled = {};
   final Set<ContactRequestStatus> _incomingFilters = {
     ContactRequestStatus.pending,
-    ContactRequestStatus.accepted,
     ContactRequestStatus.declined,
   };
   final Set<ContactRequestStatus> _outgoingFilters = {
     ContactRequestStatus.pending,
-    ContactRequestStatus.accepted,
     ContactRequestStatus.declined,
   };
+  final TextEditingController _connectionSearchCtrl = TextEditingController();
+  String _connectionSearch = '';
+  ConnectionSort _connectionSort = ConnectionSort.recent;
   List<ContactRequest> _incoming = [];
   List<ContactRequest> _outgoing = [];
   bool _loadingIncoming = true;
@@ -43,7 +44,14 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
   void initState() {
     super.initState();
     _userId = Supabase.instance.client.auth.currentUser?.id;
+    _connectionSearchCtrl.text = _connectionSearch;
     _loadAll();
+  }
+
+  @override
+  void dispose() {
+    _connectionSearchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAll() async {
@@ -58,19 +66,26 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
     try {
       final data = await _service.fetchContactRequests(outgoing: false);
       if (!mounted) return;
+      final disabled = <String>{
+        ...data
+            .where((r) => r.status != ContactRequestStatus.declined)
+            .map((r) => r.requester.id == _userId ? r.target.id : r.requester.id),
+        ..._outgoing
+            .where((r) => r.status != ContactRequestStatus.declined)
+            .map((r) => r.target.id),
+      }..removeWhere((id) => id.isEmpty);
       setState(() {
         _incoming = data;
         _loadingIncoming = false;
-        _introDisabled.addAll(
-          data.where((r) => r.status != ContactRequestStatus.declined).map(
-              (r) => r.requester.id == _userId ? r.target.id : r.requester.id),
-        );
+        _introDisabled
+          ..clear()
+          ..addAll(disabled);
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _loadingIncoming = false;
-        _errorIncoming = 'Could not load incoming intros.';
+        _errorIncoming = 'Could not load incoming connections.';
       });
     }
   }
@@ -83,20 +98,26 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
     try {
       final data = await _service.fetchContactRequests(outgoing: true);
       if (!mounted) return;
+      final disabled = <String>{
+        ..._incoming
+            .where((r) => r.status != ContactRequestStatus.declined)
+            .map((r) => r.requester.id == _userId ? r.target.id : r.requester.id),
+        ...data
+            .where((r) => r.status != ContactRequestStatus.declined)
+            .map((r) => r.target.id),
+      }..removeWhere((id) => id.isEmpty);
       setState(() {
         _outgoing = data;
         _loadingOutgoing = false;
-        _introDisabled.addAll(
-          data
-              .where((r) => r.status != ContactRequestStatus.declined)
-              .map((r) => r.target.id),
-        );
+        _introDisabled
+          ..clear()
+          ..addAll(disabled);
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _loadingOutgoing = false;
-        _errorOutgoing = 'Could not load sent intros.';
+        _errorOutgoing = 'Could not load sent connections.';
       });
     }
   }
@@ -143,6 +164,89 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
     } catch (_) {
       if (!mounted) return;
       showErrorSnackBar(context, 'Could not update request.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _updating.remove(request.id);
+        });
+      }
+    }
+  }
+
+  Future<void> _withdrawRequest(ContactRequest request) async {
+    if (_updating[request.id] == true) return;
+    setState(() {
+      _updating[request.id] = true;
+    });
+    try {
+      await _service.withdrawContactRequest(id: request.id);
+      await _loadAll();
+      if (mounted) {
+        showSuccessSnackBar(context, 'Request withdrawn');
+      }
+    } catch (_) {
+      if (mounted) {
+        showErrorSnackBar(context, 'Could not withdraw request.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _updating.remove(request.id);
+        });
+      }
+    }
+  }
+
+  Future<void> _resendRequest(ContactRequest request) async {
+    if (_updating[request.id] == true) return;
+    if (request.target.id.isEmpty) {
+      showErrorSnackBar(context, 'Missing member profile for connection.');
+      return;
+    }
+    final controller = TextEditingController();
+    final message = await showDialog<String?>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Reconnect with ${request.target.name}'),
+        content: TextField(
+          controller: controller,
+          maxLines: 3,
+          maxLength: 240,
+          decoration: const InputDecoration(
+            labelText: 'Message (optional)',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+    if (message == null) return;
+
+    setState(() {
+      _updating[request.id] = true;
+    });
+    try {
+      await _service.requestIntro(
+        targetUserId: request.target.id,
+        message: message.trim().isEmpty ? null : message.trim(),
+      );
+      await _loadAll();
+      if (mounted) {
+        showSuccessSnackBar(context, 'Connection request re-sent');
+      }
+    } catch (_) {
+      if (mounted) {
+        showErrorSnackBar(context, 'Could not resend right now.');
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -217,7 +321,7 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
                 const Icon(Icons.lock_outline, size: 48),
                 const SizedBox(height: 12),
                 Text(
-                  'Sign in to view intro requests',
+                  'Sign in to view connection requests',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ],
@@ -227,14 +331,17 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
       );
     }
 
+    final initialIndex = _mapInitialTab(widget.initialTab);
+
     return DefaultTabController(
-      length: 2,
-      initialIndex: widget.initialTab.clamp(0, 1),
+      length: 3,
+      initialIndex: initialIndex,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Connections'),
           bottom: const TabBar(
             tabs: [
+              Tab(text: 'Connections'),
               Tab(text: 'Incoming'),
               Tab(text: 'Sent'),
             ],
@@ -242,6 +349,21 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
         ),
         body: TabBarView(
           children: [
+            _ConnectionsTab(
+              connections: _acceptedConnections(),
+              loading: _loadingIncoming || _loadingOutgoing,
+              searchController: _connectionSearchCtrl,
+              onSearchChanged: (value) {
+                setState(() => _connectionSearch = value);
+              },
+              sort: _connectionSort,
+              onSortChanged: (sort) {
+                setState(() => _connectionSort = sort);
+              },
+              onMessage: _openChat,
+              currentUserId: _userId!,
+              onRefresh: _loadAll,
+            ),
             _RequestList(
               requests: _incoming,
               loading: _loadingIncoming,
@@ -295,6 +417,8 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
               onEditNotes: _editNotes,
               updatingNotes: _updatingNotes,
               onMessage: _openChat,
+              onWithdraw: _withdrawRequest,
+              onResend: _resendRequest,
             ),
           ],
         ),
@@ -409,15 +533,7 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
                             : null,
                         child: (party.avatarUrl == null ||
                                 party.avatarUrl!.isEmpty)
-                            ? Text(
-                                party.name.isNotEmpty
-                                    ? party.name[0].toUpperCase()
-                                    : '?',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              )
+                            ? const Icon(Icons.handshake_outlined, size: 22)
                             : null,
                       ),
                       const SizedBox(width: 12),
@@ -485,7 +601,7 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
                       Expanded(
                         child: Tooltip(
                           message: disabled
-                              ? 'You already sent an intro to this member'
+                              ? 'You already sent a connection request to this member'
                               : '',
                           child: ElevatedButton(
                             onPressed:
@@ -523,6 +639,49 @@ class _ContactRequestsScreenState extends State<ContactRequestsScreen> {
       },
     );
   }
+
+  List<ContactRequest> _acceptedConnections() {
+    final map = <String, ContactRequest>{};
+    for (final r in [..._incoming, ..._outgoing]) {
+      if (r.status != ContactRequestStatus.accepted) continue;
+      if (r.id.isEmpty) continue;
+      map[r.id] = r;
+    }
+    final list = map.values.toList();
+    if (_connectionSort == ConnectionSort.recent) {
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    } else {
+      list.sort((a, b) {
+        final aName = _otherPartyName(a);
+        final bName = _otherPartyName(b);
+        return aName.compareTo(bName);
+      });
+    }
+    if (_connectionSearch.trim().isEmpty) return list;
+    final q = _connectionSearch.trim().toLowerCase();
+    return list
+        .where((r) {
+          final other = _otherParty(r);
+          return other.name.toLowerCase().contains(q) ||
+              other.headline.toLowerCase().contains(q) ||
+              other.role.toLowerCase().contains(q);
+        })
+        .toList();
+  }
+
+  ContactRequestParty _otherParty(ContactRequest r) {
+    final isIncoming = _userId == r.target.id;
+    return isIncoming ? r.requester : r.target;
+  }
+
+  String _otherPartyName(ContactRequest r) => _otherParty(r).name;
+
+  int _mapInitialTab(int raw) {
+    // Default to Connections. Legacy mapping: 1 was "Sent"; map to index 2. Use 2 for Incoming explicitly.
+    if (raw == 1) return 2;
+    if (raw == 2) return 1;
+    return 0;
+  }
 }
 
 class _RequestList extends StatelessWidget {
@@ -543,6 +702,8 @@ class _RequestList extends StatelessWidget {
     required this.onEditNotes,
     required this.updatingNotes,
     required this.onMessage,
+    this.onWithdraw,
+    this.onResend,
   });
 
   final List<ContactRequest> requests;
@@ -562,6 +723,8 @@ class _RequestList extends StatelessWidget {
   final void Function(ContactRequest) onEditNotes;
   final Map<String, bool> updatingNotes;
   final void Function(ContactRequest, ContactRequestParty) onMessage;
+  final void Function(ContactRequest)? onWithdraw;
+  final void Function(ContactRequest)? onResend;
 
   @override
   Widget build(BuildContext context) {
@@ -595,7 +758,7 @@ class _RequestList extends StatelessWidget {
           children: const [
             SizedBox(height: 120),
             Center(
-              child: Text('No intro requests yet'),
+              child: Text('No connection requests yet'),
             ),
           ],
         ),
@@ -609,16 +772,10 @@ class _RequestList extends StatelessWidget {
       onRefresh: onRefresh,
       child: ListView.separated(
         padding: const EdgeInsets.all(16),
-        itemCount: filtered.length + 1,
+        itemCount: filtered.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
-          if (index == 0) {
-            return _StatusFilters(
-              selected: statusFilters,
-              onToggle: onToggleStatus,
-            );
-          }
-          final req = filtered[index - 1];
+          final req = filtered[index];
           final isIncoming = currentUserId == req.target.id;
           final other = isIncoming ? req.requester : req.target;
           final canAct = isIncomingTab &&
@@ -647,9 +804,241 @@ class _RequestList extends StatelessWidget {
             onEditNotes: () => onEditNotes(req),
             editingNotes: isUpdatingNotes,
             onMessage: () => onMessage(req, other),
+            onWithdraw: (!isIncoming && onWithdraw != null && req.isPending)
+                ? () => onWithdraw!(req)
+                : null,
+            onResend: (!isIncoming &&
+                    req.status == ContactRequestStatus.declined &&
+                    onResend != null)
+                ? () => onResend!(req)
+                : null,
           );
         },
       ),
+    );
+  }
+}
+
+enum ConnectionSort { recent, name }
+
+class _ConnectionsTab extends StatelessWidget {
+  const _ConnectionsTab({
+    required this.connections,
+    required this.loading,
+    required this.searchController,
+    required this.onSearchChanged,
+    required this.sort,
+    required this.onSortChanged,
+    required this.onMessage,
+    required this.currentUserId,
+    this.onRefresh,
+  });
+
+  final List<ContactRequest> connections;
+  final bool loading;
+  final TextEditingController searchController;
+  final ValueChanged<String> onSearchChanged;
+  final ConnectionSort sort;
+  final ValueChanged<ConnectionSort> onSortChanged;
+  final void Function(ContactRequest, ContactRequestParty) onMessage;
+  final String currentUserId;
+  final Future<void> Function()? onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading && connections.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final list = connections;
+    final showEmpty = list.isEmpty;
+    final totalCount = showEmpty ? 2 : list.length + 1;
+    return RefreshIndicator(
+      onRefresh: onRefresh ?? () async {},
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: totalCount,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return _ConnectionsHeader(
+              count: list.length,
+              searchController: searchController,
+              onSearchChanged: onSearchChanged,
+              sort: sort,
+              onSortChanged: onSortChanged,
+            );
+          }
+          if (showEmpty) {
+            return Padding(
+              padding: const EdgeInsets.only(top: 40),
+              child: Center(
+                child: Text(
+                  'No connections yet',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: Theme.of(context).colorScheme.outline),
+                ),
+              ),
+            );
+          }
+          final connection = list[index - 1];
+          final other =
+              currentUserId == connection.target.id ? connection.requester : connection.target;
+          final connectedOn = _formatConnectedDate(connection.createdAt);
+          final roleLine = [
+            if (other.role.isNotEmpty) other.role,
+            if (other.headline.isNotEmpty) other.headline,
+          ].join(' · ');
+          final accent = _roleAccent(other.role, Theme.of(context));
+          return Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color:
+                      Theme.of(context).colorScheme.outlineVariant.withOpacity(0.5),
+                ),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                leading: CircleAvatar(
+                  radius: 22,
+                  backgroundColor: accent.withValues(alpha: 0.14),
+                  backgroundImage: (other.avatarUrl != null &&
+                          other.avatarUrl!.isNotEmpty)
+                      ? NetworkImage(other.avatarUrl!)
+                      : null,
+                  child: (other.avatarUrl == null || other.avatarUrl!.isEmpty)
+                      ? Icon(Icons.handshake_outlined,
+                          color: accent, size: 18)
+                      : null,
+                ),
+                title: Text(
+                  other.name,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (roleLine.isNotEmpty)
+                      Text(
+                        roleLine,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    Text(
+                      'Connected on $connectedOn',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Theme.of(context).colorScheme.outline),
+                    ),
+                  ],
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => onMessage(connection, other),
+                      icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                      label: const Text('Message'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      tooltip: 'More',
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: 'remove',
+                          child: Text('Remove connection'),
+                        ),
+                      ],
+                      icon: const Icon(Icons.more_horiz),
+                      onSelected: (_) {},
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ConnectionsHeader extends StatelessWidget {
+  const _ConnectionsHeader({
+    required this.count,
+    required this.searchController,
+    required this.onSearchChanged,
+    required this.sort,
+    required this.onSortChanged,
+  });
+
+  final int count;
+  final TextEditingController searchController;
+  final ValueChanged<String> onSearchChanged;
+  final ConnectionSort sort;
+  final ValueChanged<ConnectionSort> onSortChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '$count connections',
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            DropdownButton<ConnectionSort>(
+              value: sort,
+              onChanged: (value) {
+                if (value != null) onSortChanged(value);
+              },
+              items: const [
+                DropdownMenuItem(
+                  value: ConnectionSort.recent,
+                  child: Text('Recently added'),
+                ),
+                DropdownMenuItem(
+                  value: ConnectionSort.name,
+                  child: Text('Name A–Z'),
+                ),
+              ],
+              underline: const SizedBox.shrink(),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          decoration: const InputDecoration(
+            hintText: 'Search by name',
+            prefixIcon: Icon(Icons.search),
+            border: OutlineInputBorder(),
+          ),
+          onChanged: onSearchChanged,
+          controller: searchController,
+        ),
+      ],
     );
   }
 }
@@ -668,6 +1057,8 @@ class _RequestCard extends StatelessWidget {
     this.onEditNotes,
     this.editingNotes = false,
     this.onMessage,
+    this.onWithdraw,
+    this.onResend,
   });
 
   final ContactRequest request;
@@ -682,6 +1073,8 @@ class _RequestCard extends StatelessWidget {
   final VoidCallback? onEditNotes;
   final bool editingNotes;
   final VoidCallback? onMessage;
+  final VoidCallback? onWithdraw;
+  final VoidCallback? onResend;
 
   @override
   Widget build(BuildContext context) {
@@ -711,13 +1104,8 @@ class _RequestCard extends StatelessWidget {
                             ? NetworkImage(other.avatarUrl!)
                             : null,
                     child: (other.avatarUrl == null || other.avatarUrl!.isEmpty)
-                        ? Text(
-                            initial,
-                            style: TextStyle(
-                              color: accent,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )
+                        ? Icon(Icons.handshake_outlined,
+                            color: accent, size: 20)
                         : null,
                   ),
                   const SizedBox(width: 12),
@@ -812,21 +1200,64 @@ class _RequestCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                TextButton.icon(
-                  onPressed: editingNotes ? null : onEditNotes,
-                  icon: editingNotes
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.edit_note_outlined),
-                  label: const Text('Add note'),
-                ),
-              ],
-            ),
+            if (request.status != ContactRequestStatus.accepted)
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: editingNotes ? null : onEditNotes,
+                    icon: editingNotes
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.edit_note_outlined),
+                    label: const Text('Add note'),
+                  ),
+                ],
+              ),
+            if (!isIncoming && request.isPending && onWithdraw != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: isUpdating ? null : onWithdraw,
+                      icon: isUpdating
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.undo),
+                      label: const Text('Withdraw'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (!isIncoming &&
+                request.status == ContactRequestStatus.declined &&
+                onResend != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: isUpdating ? null : onResend,
+                      icon: isUpdating
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.refresh),
+                      label: const Text('Resend request'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             if (canAct) ...[
               const SizedBox(height: 12),
               Row(
@@ -891,20 +1322,7 @@ class _StatusFilters extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final options = ContactRequestStatus.values;
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: options
-          .map(
-            (s) => FilterChip(
-              label: Text(s.name),
-              selected: selected.contains(s),
-              onSelected: (_) => onToggle(s),
-            ),
-          )
-          .toList(),
-    );
+    return const SizedBox.shrink();
   }
 }
 
@@ -1008,4 +1426,26 @@ String _timeAgo(DateTime createdAt) {
   if (diff.inMinutes < 60) return '${diff.inMinutes}m';
   if (diff.inHours < 24) return '${diff.inHours}h';
   return '${diff.inDays}d';
+}
+
+String _formatConnectedDate(DateTime createdAt) {
+  final local = createdAt.toLocal();
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec'
+  ];
+  final monthLabel = (local.month >= 1 && local.month <= 12)
+      ? months[local.month - 1]
+      : 'Unknown';
+  return '$monthLabel ${local.day}, ${local.year}';
 }

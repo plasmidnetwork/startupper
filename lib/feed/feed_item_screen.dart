@@ -327,7 +327,7 @@ class _FeedItemScreenState extends State<FeedItemScreen> {
               tooltip: 'Refresh',
             ),
             IconButton(
-              icon: const Icon(Icons.mail_outline),
+              icon: const Icon(Icons.people_outline),
               tooltip: 'Connections',
               onPressed: () {
                 Navigator.pushNamed(context, '/intros',

@@ -241,7 +241,7 @@ const _mockFeed = <FeedCardData>[
     title: 'Weekly update',
     subtitle:
         'Shipped AI onboarding and cut churn by 9%. Piloting with 3 design partners this week.',
-    ask: 'Looking for intros to PLG advisors',
+    ask: 'Looking for connections to PLG advisors',
     metrics: [
       MetricHighlight(label: 'Activation', value: '+7%'),
       MetricHighlight(

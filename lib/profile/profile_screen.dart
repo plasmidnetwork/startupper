@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/supabase_service.dart';
@@ -136,7 +137,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _saving = true;
       });
-      final file = File(picked.path);
+      Uint8List? bytes;
+      File? file;
+      if (kIsWeb) {
+        bytes = await picked.readAsBytes();
+      } else {
+        file = File(picked.path);
+      }
       await _service.upsertProfile(
         fullName: _nameCtrl.text.trim().isEmpty
             ? (_profile?['full_name']?.toString() ?? '')
@@ -150,19 +157,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
         role: _profile?['role']?.toString() ?? 'Member',
         availableForFreelancing: _freelancing,
         avatarFile: file,
+        avatarBytes: bytes,
+        avatarFilename: picked.name,
       );
       await _load();
       if (!mounted) return;
       showSuccessSnackBar(context, 'Avatar updated');
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _saving = false;
-      });
       showErrorSnackBar(
         context,
         'Could not update avatar. Please try again.',
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+        });
+      }
     }
   }
 

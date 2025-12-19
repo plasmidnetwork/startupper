@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:typed_data';
 
 class SupabaseService {
   SupabaseClient get _client => Supabase.instance.client;
@@ -100,6 +101,8 @@ class SupabaseService {
     required String role,
     required bool availableForFreelancing,
     File? avatarFile,
+    Uint8List? avatarBytes,
+    String? avatarFilename,
   }) async {
     final user = currentUser;
     if (user == null) {
@@ -107,7 +110,9 @@ class SupabaseService {
     }
 
     String? avatarUrl;
-    if (avatarFile != null) {
+    if (avatarBytes != null && avatarBytes.isNotEmpty && avatarFilename != null) {
+      avatarUrl = await _uploadAvatarBytes(user.id, avatarBytes, avatarFilename);
+    } else if (avatarFile != null) {
       avatarUrl = await _uploadAvatar(user.id, avatarFile);
     }
 
@@ -143,6 +148,19 @@ class SupabaseService {
     await _client.storage.from('avatars').upload(
           path,
           file,
+          fileOptions: FileOptions(upsert: true, contentType: contentType),
+        );
+    return _client.storage.from('avatars').getPublicUrl(path);
+  }
+
+  Future<String> _uploadAvatarBytes(
+      String userId, Uint8List bytes, String filename) async {
+    final ext = _fileExtension(filename);
+    final contentType = _contentTypeForExtension(ext);
+    final path = '$userId.$ext';
+    await _client.storage.from('avatars').uploadBinary(
+          path,
+          bytes,
           fileOptions: FileOptions(upsert: true, contentType: contentType),
         );
     return _client.storage.from('avatars').getPublicUrl(path);

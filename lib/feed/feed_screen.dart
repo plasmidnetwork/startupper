@@ -122,9 +122,11 @@ class _FeedScreenState extends State<FeedScreen> {
   }
 
   Future<void> _openAuthorProfile(FeedAuthor author) async {
+    final status = author.id != null ? _introStatusByTarget[author.id!] : null;
     final isIntroDisabled = author.id != null &&
         author.id!.isNotEmpty &&
-        _pendingIntroTargets.contains(author.id);
+        (_pendingIntroTargets.contains(author.id) ||
+            status == ContactRequestStatus.accepted);
     bool requesting = false;
     if (!mounted) return;
     await showModalBottomSheet(
@@ -683,25 +685,8 @@ class _FeedScreenState extends State<FeedScreen> {
               Navigator.pushNamed(context, '/startups');
             },
           ),
-          PopupMenuButton<String>(
-            tooltip: 'Copy feed link',
-            onSelected: (choice) {
-              _copyFeedLink(useWeb: choice == 'web');
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'app',
-                child: Text('Copy app link'),
-              ),
-              const PopupMenuItem(
-                value: 'web',
-                child: Text('Copy web link'),
-              ),
-            ],
-            icon: const Icon(Icons.link),
-          ),
           IconButton(
-            icon: const Icon(Icons.mail_outline),
+            icon: const Icon(Icons.people_outline),
             tooltip: 'Connections',
             onPressed: () {
               _openIntros(initialTab: 0);
@@ -2330,7 +2315,8 @@ class _ComposeDialogState extends State<_ComposeDialog> {
         _attachments.add(_LocalAttachment(
           bytes: bytes,
           filename: file.name,
-          contentType: 'image/${file.name.toLowerCase().endsWith('png') ? 'png' : 'jpeg'}',
+          contentType:
+              'image/${file.name.toLowerCase().endsWith('png') ? 'png' : 'jpeg'}',
           isVideo: false,
         ));
       });
@@ -2367,7 +2353,8 @@ class _ComposeDialogState extends State<_ComposeDialog> {
       });
     } else {
       setState(() {
-        _attachments.add(_LocalAttachment(file: io.File(file.path), isVideo: true));
+        _attachments
+            .add(_LocalAttachment(file: io.File(file.path), isVideo: true));
       });
     }
   }
@@ -2437,8 +2424,7 @@ class _ComposeDialogState extends State<_ComposeDialog> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        showErrorSnackBar(
-            context, 'Could not post right now. ${e.toString()}');
+        showErrorSnackBar(context, 'Could not post right now. ${e.toString()}');
       }
     } finally {
       if (mounted) setState(() => _posting = false);
@@ -2538,7 +2524,8 @@ class _ComposeDialogState extends State<_ComposeDialog> {
                       minLines: 6,
                       maxLength: _maxContentLength,
                       // Work around iOS context menu crash by disabling the system menu for now
-                      contextMenuBuilder: (context, state) => const SizedBox.shrink(),
+                      contextMenuBuilder: (context, state) =>
+                          const SizedBox.shrink(),
                       style: theme.textTheme.bodyLarge?.copyWith(
                         fontSize: 16,
                         height: 1.5,
@@ -2605,35 +2592,36 @@ class _ComposeDialogState extends State<_ComposeDialog> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                    children: _attachments
-                        .map(
-                          (att) => Stack(
-                            alignment: Alignment.topRight,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: Container(
-                                  width: 96,
-                                  height: 96,
-                                  color: theme.colorScheme.surfaceVariant,
-                                  child: att.isVideo
-                                      ? Center(
-                                          child: Icon(Icons.videocam,
-                                              color: theme.colorScheme.primary),
-                                        )
-                                      : att.bytes != null
-                                          ? Image.memory(
-                                              att.bytes!,
-                                              fit: BoxFit.cover,
+                        children: _attachments
+                            .map(
+                              (att) => Stack(
+                                alignment: Alignment.topRight,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Container(
+                                      width: 96,
+                                      height: 96,
+                                      color: theme.colorScheme.surfaceVariant,
+                                      child: att.isVideo
+                                          ? Center(
+                                              child: Icon(Icons.videocam,
+                                                  color: theme
+                                                      .colorScheme.primary),
                                             )
-                                          : att.file != null
-                                              ? Image.file(
-                                                  att.file!,
+                                          : att.bytes != null
+                                              ? Image.memory(
+                                                  att.bytes!,
                                                   fit: BoxFit.cover,
                                                 )
-                                              : const SizedBox.shrink(),
-                                ),
-                              ),
+                                              : att.file != null
+                                                  ? Image.file(
+                                                      att.file!,
+                                                      fit: BoxFit.cover,
+                                                    )
+                                                  : const SizedBox.shrink(),
+                                    ),
+                                  ),
                                   Positioned(
                                     top: -6,
                                     right: -6,
@@ -2654,11 +2642,13 @@ class _ComposeDialogState extends State<_ComposeDialog> {
                                           boxShadow: [
                                             BoxShadow(
                                               blurRadius: 4,
-                                              color: Colors.black.withOpacity(0.15),
+                                              color: Colors.black
+                                                  .withOpacity(0.15),
                                             )
                                           ],
                                         ),
-                                        child: const Icon(Icons.close, size: 16),
+                                        child:
+                                            const Icon(Icons.close, size: 16),
                                       ),
                                     ),
                                   ),
@@ -2715,13 +2705,15 @@ class _ComposeDialogState extends State<_ComposeDialog> {
                   IconButton(
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Video upload coming soon')),
+                        const SnackBar(
+                            content: Text('Video upload coming soon')),
                       );
                     },
                     icon: const Icon(Icons.videocam_outlined),
                     tooltip: 'Video upload coming soon',
                     style: IconButton.styleFrom(
-                      foregroundColor: theme.colorScheme.onSurfaceVariant.withOpacity(0.4),
+                      foregroundColor:
+                          theme.colorScheme.onSurfaceVariant.withOpacity(0.4),
                     ),
                   ),
 

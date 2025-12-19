@@ -65,6 +65,10 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
     _saveFounder();
   }
 
+  void _handleSkip() {
+    Navigator.pushReplacementNamed(context, '/feed');
+  }
+
   Future<void> _saveFounder() async {
     setState(() => _saving = true);
     try {
@@ -111,6 +115,12 @@ class _FounderOnboardingScreenState extends State<FounderOnboardingScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text('Founder Details'),
+        actions: [
+          TextButton(
+            onPressed: _handleSkip,
+            child: const Text('Skip for now'),
+          ),
+        ],
       ),
       body: LoadingOverlay(
         isLoading: _saving,

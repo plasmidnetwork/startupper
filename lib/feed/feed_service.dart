@@ -106,7 +106,7 @@ class FeedService {
     await _client.from('contact_requests').update({
       'status': status.name,
       'status_changed_at': DateTime.now().toIso8601String(),
-    }).eq('id', id);
+    }).eq('id', id).or('requester.eq.$userId,target.eq.$userId');
   }
 
   Future<void> updateContactRequestNotes({
@@ -119,7 +119,19 @@ class FeedService {
     }
     await _client.from('contact_requests').update({
       'notes': notes ?? '',
-    }).eq('id', id);
+    }).eq('id', id).or('requester.eq.$userId,target.eq.$userId');
+  }
+
+  Future<void> withdrawContactRequest({required String id}) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('User not signed in');
+    }
+    await _client
+        .from('contact_requests')
+        .delete()
+        .eq('id', id)
+        .eq('requester', userId);
   }
 
   Future<List<FeedComment>> fetchComments(String feedItemId) async {

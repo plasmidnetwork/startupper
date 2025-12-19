@@ -1,5 +1,6 @@
 class StartupProfile {
   const StartupProfile({
+    required this.startupId,
     required this.userId,
     required this.founderName,
     required this.headline,
@@ -10,12 +11,14 @@ class StartupProfile {
     required this.location,
     required this.createdAt,
     this.avatarUrl,
+    this.founderAvatarUrl,
     this.website,
     this.demoVideo,
     this.appStoreId,
     this.playStoreId,
   });
 
+  final String startupId;
   final String userId;
   final String founderName;
   final String headline;
@@ -26,6 +29,7 @@ class StartupProfile {
   final String location;
   final DateTime createdAt;
   final String? avatarUrl;
+  final String? founderAvatarUrl;
   final String? website;
   final String? demoVideo;
   final String? appStoreId;
