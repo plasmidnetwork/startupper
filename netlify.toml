@@ -1,0 +1,38 @@
+# Netlify configuration for Flutter web app
+
+[build]
+  # Use the build script to install Flutter and build
+  command = "chmod +x ./build.sh && ./build.sh"
+  publish = "build/web"
+
+# Environment variables (set sensitive ones in Netlify dashboard!)
+[build.environment]
+  FLUTTER_VERSION = "3.24.0"
+
+# SPA routing - redirect all paths to index.html for Flutter routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Cache Flutter assets for better performance
+[[headers]]
+  for = "/flutter.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/main.dart.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/canvaskit/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
